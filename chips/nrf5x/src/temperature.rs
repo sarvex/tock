@@ -134,7 +134,7 @@ impl<'a> Temp<'a> {
         self.disable_interrupts();
 
         // trigger callback with temperature
-        self.client.map(|client| client.callback(temp as usize));
+        self.client.map(|client| client.callback(temp as i32));
     }
 
     fn enable_interrupts(&self) {

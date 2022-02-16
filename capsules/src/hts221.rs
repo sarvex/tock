@@ -185,7 +185,7 @@ enum State {
     InitiateReading(CalibrationData),
     CheckStatus(CalibrationData),
     Read(CalibrationData),
-    Idle(CalibrationData, usize, usize),
+    Idle(CalibrationData, i32, usize),
 }
 
 impl<'a> I2CClient for Hts221<'a> {
@@ -324,7 +324,7 @@ impl<'a> I2CClient for Hts221<'a> {
                 let temperature_raw = ((buffer[2] as i16) | ((buffer[3] as i16) << 8)) as f32;
                 let temperature = ((temperature_raw * calibration_data.temp_slope
                     + calibration_data.temp_intercept)
-                    * 100.0) as usize;
+                    * 100.0) as i32;
                 buffer[0] = CTRL_REG1;
                 // TODO(alevy): this is a workaround for a bug. We should be able to turn
                 // off the the sensor between transactions, and turn it back on (as is done

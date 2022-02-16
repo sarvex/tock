@@ -561,16 +561,16 @@ impl i2c::I2CClient for Lsm303dlhcI2C<'_> {
                 self.state.set(State::Idle);
             }
             State::ReadTemperature => {
-                let mut temp: usize = 0;
+                let mut temp = i32::MIN;
                 let values = if status == Ok(()) {
-                    temp = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) >> 4) as usize;
+                    temp = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) >> 4) as i32;
                     self.temperature_client.map(|client| {
-                        client.callback((temp as i16 / 8 + TEMP_OFFSET as i16) as usize);
+                        client.callback(temp / 8 + TEMP_OFFSET as i32);
                     });
                     true
                 } else {
                     self.temperature_client.map(|client| {
-                        client.callback(usize::MAX);
+                        client.callback(i32::MIN);
                     });
                     false
                 };
@@ -578,7 +578,7 @@ impl i2c::I2CClient for Lsm303dlhcI2C<'_> {
                 self.current_process.map(|process_id| {
                     let _ = self.apps.enter(*process_id, |_grant, upcalls| {
                         if values {
-                            upcalls.schedule_upcall(0, (temp, 0, 0)).ok();
+                            upcalls.schedule_upcall(0, (temp as usize, 0, 0)).ok();
                         } else {
                             upcalls.schedule_upcall(0, (0, 0, 0)).ok();
                         }

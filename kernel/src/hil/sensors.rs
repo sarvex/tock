@@ -14,7 +14,7 @@ pub trait TemperatureClient {
     ///
     /// - `value`: the most recently read temperature in hundredths of degrees
     /// centigrate.
-    fn callback(&self, value: usize);
+    fn callback(&self, value: i32);
 }
 
 /// A basic interface for a humidity sensor

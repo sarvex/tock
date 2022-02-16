@@ -488,10 +488,10 @@ impl spi::SpiMasterClient for L3gd20Spi<'_> {
                     }
 
                     L3gd20Status::ReadTemperature => {
-                        let mut temperature: usize = 0;
+                        let mut temperature = 0;
                         let value = if let Some(ref buf) = read_buffer {
                             if len >= 2 {
-                                temperature = (buf[1] as i8) as usize;
+                                temperature = buf[1] as i32;
                                 self.temperature_client.map(|client| {
                                     client.callback(temperature * 100);
                                 });
@@ -506,7 +506,9 @@ impl spi::SpiMasterClient for L3gd20Spi<'_> {
                             false
                         };
                         if value {
-                            upcalls.schedule_upcall(0, (temperature, 0, 0)).ok();
+                            upcalls
+                                .schedule_upcall(0, (temperature as usize, 0, 0))
+                                .ok();
                         } else {
                             upcalls.schedule_upcall(0, (0, 0, 0)).ok();
                         }
