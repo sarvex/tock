@@ -178,7 +178,8 @@ impl<'a, A: Alarm<'a>> i2c::I2CClient for SHT3x<'a, A> {
                                 let mut stemp = buffer[0] as u32;
                                 stemp = stemp << 8;
                                 stemp = stemp | buffer[1] as u32;
-                                let stemp = ((4375 * stemp) >> 14) as i32 - 4500;
+                                // note: per datasheet, measurement is unsigned before subtracting 4500
+                                let stemp = (((4375 * stemp) >> 14) as i32) - 4500;
                                 self.temperature_client.map(|cb| cb.callback(stemp));
                             } else {
                                 self.temperature_client.map(|cb| cb.callback(i32::MIN));

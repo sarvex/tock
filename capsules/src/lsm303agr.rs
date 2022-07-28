@@ -544,9 +544,9 @@ impl i2c::I2CClient for Lsm303agrI2C<'_> {
                 self.state.set(State::Idle);
             }
             State::ReadTemperature => {
-                let temp = i32::MIN;
+                let mut temp = i32::MIN;
                 let values = if status == Ok(()) {
-                    let temp = (buffer[1] as u16 as i16 | ((buffer[0] as i16) << 8)) as i32;
+                    temp = (buffer[1] as i16 | ((buffer[0] as i16) << 8)) as i32;
                     self.temperature_client.map(|client| {
                         client.callback(temp / 8);
                     });

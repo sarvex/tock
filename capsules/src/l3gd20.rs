@@ -491,7 +491,8 @@ impl spi::SpiMasterClient for L3gd20Spi<'_> {
                         let mut temperature = 0;
                         let value = if let Some(ref buf) = read_buffer {
                             if len >= 2 {
-                                temperature = buf[1] as i32;
+                                // note: per datasheet, measurement is 8-bit two's complement
+                                temperature = (buf[1] as i8) as i32;
                                 self.temperature_client.map(|client| {
                                     client.callback(temperature * 100);
                                 });

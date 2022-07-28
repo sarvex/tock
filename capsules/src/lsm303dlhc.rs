@@ -565,7 +565,7 @@ impl i2c::I2CClient for Lsm303dlhcI2C<'_> {
                 let values = if status == Ok(()) {
                     temp = ((buffer[1] as i16 | ((buffer[0] as i16) << 8)) >> 4) as i32;
                     self.temperature_client.map(|client| {
-                        client.callback(temp / 8 + TEMP_OFFSET as i32);
+                        client.callback(temp / 8 + (TEMP_OFFSET as i32));
                     });
                     true
                 } else {

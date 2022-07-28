@@ -143,7 +143,7 @@ impl<'a> i2c::I2CClient for Mlx90614SMBus<'a> {
 
                 let values = if status == Ok(()) {
                     // Convert to centi celsius
-                    temp = ((buffer[0] as usize | (buffer[1] as usize) << 8) * 2) as i32 - 27300;
+                    temp = ((buffer[0] as i32 | ((buffer[1] as i32) << 8)) * 2) - 27300;
                     self.temperature_client.map(|client| {
                         client.callback(temp);
                     });

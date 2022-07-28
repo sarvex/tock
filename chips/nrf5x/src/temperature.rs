@@ -125,7 +125,8 @@ impl<'a> Temp<'a> {
 
         // get temperature
         // Result of temperature measurement in °C, 2's complement format, 0.25 °C
-        let temp = (self.registers.temp.get() / 4) * 100;
+        // note: per datasheet, measurement is 32-bit two's complement
+        let temp = ((self.registers.temp.get() as i32) / 4) * 100;
 
         // stop measurement
         self.registers.task_stop.write(Task::ENABLE::SET);
@@ -134,7 +135,7 @@ impl<'a> Temp<'a> {
         self.disable_interrupts();
 
         // trigger callback with temperature
-        self.client.map(|client| client.callback(temp as i32));
+        self.client.map(|client| client.callback(temp));
     }
 
     fn enable_interrupts(&self) {
