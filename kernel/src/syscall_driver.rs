@@ -96,6 +96,7 @@ use crate::syscall::SyscallReturn;
 /// application (e.g. not
 /// [`SubscribeSuccess`](crate::syscall::SyscallReturn::SubscribeSuccess)).
 /// This means that the inner value **must** remain private.
+#[derive(Debug, PartialEq, Eq)]
 pub struct CommandReturn(SyscallReturn);
 impl CommandReturn {
     pub(crate) fn into_inner(self) -> SyscallReturn {

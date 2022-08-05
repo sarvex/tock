@@ -87,7 +87,7 @@
 
 #![feature(core_intrinsics)]
 #![warn(unreachable_pub)]
-#![no_std]
+#![cfg_attr(not(feature = "testonly"), no_std)]
 
 // Define the kernel major and minor versions
 pub const MAJOR: u16 = 2;

@@ -133,3 +133,123 @@ impl<L: led::Led, const NUM_LEDS: usize> SyscallDriver for LedDriver<'_, L, NUM_
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use core::cell::Cell;
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    enum FakeLedState {
+        NotConfigured,
+        Unknown,
+        On,
+        Off,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct FakeLed {
+        state: Cell<FakeLedState>,
+    }
+
+    impl FakeLed {
+        const fn new() -> Self {
+            Self {
+                state: Cell::new(FakeLedState::NotConfigured),
+            }
+        }
+    }
+
+    impl kernel::hil::led::Led for FakeLed {
+        fn init(&self) {
+            self.state.set(FakeLedState::Unknown);
+        }
+
+        fn on(&self) {
+            assert_ne!(self.state.get(), FakeLedState::NotConfigured);
+            self.state.set(FakeLedState::On);
+        }
+
+        fn off(&self) {
+            assert_ne!(self.state.get(), FakeLedState::NotConfigured);
+            self.state.set(FakeLedState::Off);
+        }
+
+        fn toggle(&self) {
+            if self.read() {
+                self.off();
+            } else {
+                self.on();
+            }
+        }
+
+        fn read(&self) -> bool {
+            match self.state.get() {
+                FakeLedState::NotConfigured | FakeLedState::Unknown => panic!("LED state unknown"),
+                FakeLedState::On => true,
+                FakeLedState::Off => false,
+            }
+        }
+    }
+
+    #[test]
+    fn basic_test() {
+        // Outside of the kernel crate, there's no upstreamed way to:
+        // - Compare a CommandReturn with an expected value
+        // - Create a ProcessId to pass to SyscallDriver::command
+        // - Create a kernel to create a ProcessId
+
+        let fake_leds = [FakeLed::new(), FakeLed::new(), FakeLed::new()];
+        let mut driver_input = [&fake_leds[0], &fake_leds[1], &fake_leds[2]];
+
+        let driver = LedDriver::new(&mut driver_input);
+        const OFF_LED: FakeLed = FakeLed {
+            state: Cell::new(FakeLedState::Off),
+        };
+        const ON_LED: FakeLed = FakeLed {
+            state: Cell::new(FakeLedState::On),
+        };
+
+        assert_eq!(fake_leds, [OFF_LED, OFF_LED, OFF_LED]);
+
+        // No safe way to create a &'static without...leaking a Box?
+        // TODO: replace with another safe static construction mechanism like OnceMut
+        extern crate alloc;
+        use alloc::boxed::Box;
+        // Should there instead be a fake Kernel and/or ProcessId exported from the kernel crate?
+        let id = kernel::process::ProcessId::new_external(
+            Box::leak(Box::new(kernel::Kernel::new(&[]))),
+            usize::MAX,
+            usize::MAX,
+            &kernel::capabilities::TestingCap,
+        );
+
+        assert_eq!(
+            driver.command(0, 0, 0, id),
+            CommandReturn::success_u32(3u32)
+        );
+        assert_eq!(fake_leds, [OFF_LED, OFF_LED, OFF_LED]);
+
+        assert_eq!(driver.command(1, 0, 0, id), CommandReturn::success());
+        assert_eq!(fake_leds, [ON_LED, OFF_LED, OFF_LED]);
+
+        assert_eq!(driver.command(1, 0, 0, id), CommandReturn::success());
+        assert_eq!(driver.command(1, 1, 0, id), CommandReturn::success());
+        assert_eq!(
+            driver.command(1, 3, 0, id),
+            CommandReturn::failure(ErrorCode::INVAL)
+        );
+        assert_eq!(fake_leds, [ON_LED, ON_LED, OFF_LED]);
+
+        assert_eq!(driver.command(2, 0, 0, id), CommandReturn::success());
+        assert_eq!(
+            driver.command(2, 3, 0, id),
+            CommandReturn::failure(ErrorCode::INVAL)
+        );
+        assert_eq!(fake_leds, [OFF_LED, ON_LED, OFF_LED]);
+    }
+
+    #[test]
+    fn out_of_range() {}
+}

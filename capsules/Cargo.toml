@@ -8,3 +8,6 @@ edition = "2021"
 kernel = { path = "../kernel" }
 enum_primitive = { path = "../libraries/enum_primitive" }
 tickv = { path = "../libraries/tickv" }
+
+[dev-dependencies]
+kernel = { path = "../kernel", features = ["testonly"] }
