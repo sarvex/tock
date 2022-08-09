@@ -247,7 +247,7 @@ pub enum SyscallReturnVariant {
 /// and `GrantKernelData`) or wrappers around this struct
 /// ([`CommandReturn`](crate::syscall_driver::CommandReturn)) which limit the
 /// available constructors to safely constructable variants.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SyscallReturn {
     /// Generic error case
     Failure(ErrorCode),
