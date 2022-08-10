@@ -90,20 +90,3 @@ pub unsafe trait CreatePortTableCapability {}
 /// of the networking stack. A capsule would never hold this capability although
 /// it may hold capabilities created via this capability.
 pub unsafe trait NetworkCapabilityCreationCapability {}
-
-#[cfg(feature = "testonly")]
-mod testonly {
-    use super::*;
-
-    pub struct TestingCap;
-    unsafe impl ProcessManagementCapability for TestingCap {}
-    unsafe impl MainLoopCapability for TestingCap {}
-    unsafe impl MemoryAllocationCapability for TestingCap {}
-    unsafe impl ExternalProcessCapability for TestingCap {}
-    unsafe impl UdpDriverCapability for TestingCap {}
-    unsafe impl CreatePortTableCapability for TestingCap {}
-    unsafe impl NetworkCapabilityCreationCapability for TestingCap {}
-}
-
-#[cfg(feature = "testonly")]
-pub use testonly::TestingCap;

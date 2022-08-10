@@ -127,3 +127,7 @@ pub use crate::errorcode::ErrorCode;
 pub use crate::kernel::Kernel;
 pub use crate::process::ProcessId;
 pub use crate::scheduler::Scheduler;
+
+#[cfg(feature = "testonly")]
+pub mod testing;
+

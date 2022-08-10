@@ -195,15 +195,7 @@ mod tests {
 
     #[test]
     fn basic_test() {
-        // Outside of the kernel crate, there's no upstreamed way to:
-        // - Compare a CommandReturn with an expected value
-        // - Create a ProcessId to pass to SyscallDriver::command
-        // - Create a kernel to create a ProcessId
-
-        let fake_leds = [FakeLed::new(), FakeLed::new(), FakeLed::new()];
-        let mut driver_input = [&fake_leds[0], &fake_leds[1], &fake_leds[2]];
-
-        let driver = LedDriver::new(&mut driver_input);
+        // LED states to compare against
         const OFF_LED: FakeLed = FakeLed {
             state: Cell::new(FakeLedState::Off),
         };
@@ -211,24 +203,24 @@ mod tests {
             state: Cell::new(FakeLedState::On),
         };
 
+        // Create the LED driver
+        let fake_leds = [FakeLed::new(), FakeLed::new(), FakeLed::new()];
+        let mut driver_input = [&fake_leds[0], &fake_leds[1], &fake_leds[2]];
+        let driver = LedDriver::new(&mut driver_input);
+
+        // Test initial state of driver
         assert_eq!(fake_leds, [OFF_LED, OFF_LED, OFF_LED]);
 
-        // No safe way to create a &'static without...leaking a Box?
-        // TODO: replace with another safe static construction mechanism like OnceMut
-        extern crate alloc;
-        use alloc::boxed::Box;
-        // Should there instead be a fake Kernel and/or ProcessId exported from the kernel crate?
+        let board_kernel = kernel::testing::create_kernel();
         let id = kernel::process::ProcessId::new_external(
-            Box::leak(Box::new(kernel::Kernel::new(&[]))),
+            board_kernel,
             usize::MAX,
             usize::MAX,
-            &kernel::capabilities::TestingCap,
+            &kernel::testing::TestingCap,
         );
 
-        assert_eq!(
-            driver.command(0, 0, 0, id),
-            CommandReturn::success_u32(3u32)
-        );
+        let result = driver.command(0, 0, 0, id);
+        assert_eq!(result, CommandReturn::success_u32(3));
         assert_eq!(fake_leds, [OFF_LED, OFF_LED, OFF_LED]);
 
         assert_eq!(driver.command(1, 0, 0, id), CommandReturn::success());
