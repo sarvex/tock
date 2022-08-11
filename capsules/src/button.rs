@@ -243,3 +243,152 @@ impl<'a, P: gpio::InterruptPin<'a>> gpio::ClientWithValue for Button<'a, P> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use kernel::hil::gpio;
+    use kernel::hil::gpio::Interrupt;
+    use kernel::utilities::cells::OptionalCell;
+
+    struct FakeGPIO<'a> {
+        state: Cell<bool>,
+        config: Cell<gpio::Configuration>,
+        client: OptionalCell<&'a dyn gpio::Client>,
+        interrupts_enabled: Cell<bool>,
+    }
+
+    impl<'a> FakeGPIO<'a> {
+        const fn new() -> Self {
+            Self {
+                state: Cell::new(false),
+                config: Cell::new(gpio::Configuration::Other),
+                client: OptionalCell::empty(),
+                interrupts_enabled: Cell::new(false),
+            }
+        }
+    }
+
+    impl<'a> gpio::Interrupt<'a> for FakeGPIO<'a> {
+        fn set_client(&self, client: &'a dyn gpio::Client) {
+            self.client.set(client);
+        }
+
+        fn enable_interrupts(&self, _: gpio::InterruptEdge) {
+            //XXX: check Config
+            self.interrupts_enabled.set(true);
+        }
+
+        fn disable_interrupts(&self) {
+            //XXX: check Config
+            self.interrupts_enabled.set(false);
+        }
+
+        fn is_pending(&self) -> bool {
+            //XXX: What to do here?
+            false
+        }
+    }
+
+    impl gpio::Input for FakeGPIO<'_> {
+        fn read(&self) -> bool {
+            //XXX: check Config
+            self.state.get()
+        }
+    }
+
+    impl gpio::Output for FakeGPIO<'_> {
+        fn set(&self) {
+            //XXX: check Config
+            self.state.set(true);
+        }
+
+        fn clear(&self) {
+            //XXX: check Config
+            self.state.set(false);
+        }
+
+        fn toggle(&self) -> bool {
+            //XXX: check Config
+            self.state.set(!self.state.get());
+            self.state.get()
+        }
+    }
+
+    impl gpio::Configure for FakeGPIO<'_> {
+        fn configuration(&self) -> gpio::Configuration {
+            self.config.get()
+        }
+
+        fn make_output(&self) -> gpio::Configuration {
+            match self.config.get() {
+                gpio::Configuration::Input => self.config.set(gpio::Configuration::InputOutput),
+                _ => self.config.set(gpio::Configuration::Output),
+            }
+            self.config.get()
+        }
+
+        fn disable_output(&self) -> gpio::Configuration {
+            match self.config.get() {
+                gpio::Configuration::InputOutput => self.config.set(gpio::Configuration::Input),
+                gpio::Configuration::Output=>self.config.set(gpio::Configuration::Other),
+                _ => panic!("Tried to disable output for non-output pin"),
+            }
+            self.config.get()
+        }
+
+        fn make_input(&self) -> gpio::Configuration {
+            gpio::Configuration::Other
+        }
+
+        fn disable_input(&self) -> gpio::Configuration {
+            gpio::Configuration::Other
+        }
+
+        fn deactivate_to_low_power(&self) {
+        }
+
+        fn set_floating_state(&self, state: gpio::FloatingState) {
+        }
+
+        fn floating_state(&self) -> gpio::FloatingState {
+            gpio::FloatingState::PullNone
+        }
+    }
+
+    #[test]
+    fn basic_test() {
+
+        // Create mocked GPIOs for driver
+        let fake_gpios = [FakeGPIO::new(), FakeGPIO::new(), FakeGPIO::new()];
+        let fake_wrappers = [gpio::InterruptValueWrapper::new(&fake_gpios[0]),
+                             gpio::InterruptValueWrapper::new(&fake_gpios[1]),
+                             gpio::InterruptValueWrapper::new(&fake_gpios[2])];
+        fake_gpios[0].set_client(&fake_wrappers[0]);
+        fake_gpios[1].set_client(&fake_wrappers[1]);
+        fake_gpios[2].set_client(&fake_wrappers[2]);
+        let driver_input = [(&fake_wrappers[0], gpio::ActivationMode::ActiveHigh, gpio::FloatingState::PullNone),
+                            (&fake_wrappers[1], gpio::ActivationMode::ActiveHigh, gpio::FloatingState::PullNone),
+                            (&fake_wrappers[2], gpio::ActivationMode::ActiveHigh, gpio::FloatingState::PullNone)];
+
+        // Create kernel resources for driver
+        let board_kernel = kernel::testing::create_kernel();
+        let grant = board_kernel.create_grant(DRIVER_NUM, &kernel::testing::TestingCap);
+        let id = kernel::process::ProcessId::new_external(
+            board_kernel,
+            usize::MAX,
+            usize::MAX,
+            &kernel::testing::TestingCap,
+        );
+
+        // Create the Button driver
+        let driver = Button::new(&driver_input, grant);
+
+        let result = driver.command(0, 0, 0, id);
+        assert_eq!(result, CommandReturn::success_u32(3));
+
+    }
+
+}
+
