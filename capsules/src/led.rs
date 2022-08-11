@@ -134,6 +134,29 @@ impl<L: led::Led, const NUM_LEDS: usize> SyscallDriver for LedDriver<'_, L, NUM_
     }
 }
 
+
+//XXX: Does `#[cfg(test)]` do something special that `cfg testonly` does not? Also, what is the purpose of marking a module as `#[cfg(test)]`?
+//  `cfg(test)` is partially convention. It also stops the entire module from being compiled
+//  `testonly` is a tock-specific feature enabled on the kernel while testing (see capsules/Cargo.toml)
+
+
+//XXX: Should tests be placed in the relevant files or centralized? Maybe a separate directory for tests?
+//  * Separate directory cleans things up and keeps files from getting huge and bloated
+//  * Separate directory makes it easier to forget about updating the capsule tests for new functionality
+//  * Both are plausible in rust, although same file is canonical per the docs
+//      https://doc.rust-lang.org/book/ch11-03-test-organization.html
+//      http://xion.io/post/code/rust-unit-test-placement.html
+
+
+//XXX: Should we consider using external crates to simplify testing? I'm not familiar enough with any to suggest.
+
+
+//TODO:
+//  * make a test for a capsule with other syscalls
+//  * make a test for a capsule with callbacks
+//  * make a test for a virtualized capsule. Test could be just for the virtualizer, or for a stackup of capsules?
+
+
 #[cfg(test)]
 mod tests {
 
