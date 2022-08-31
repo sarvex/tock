@@ -28,3 +28,14 @@ pub fn create_kernel() -> &'static kernel::Kernel {
         static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES))
     }
 }
+
+pub fn load_testing_processes(kernel: &'static kernel::Kernel) {
+    unsafe {
+        PROCESSES[0] = Some(static_init!(process_testing::ProcessTesting, process_testing::ProcessTesting::new(kernel, 0)));
+        PROCESSES[1] = Some(static_init!(process_testing::ProcessTesting, process_testing::ProcessTesting::new(kernel, 1)));
+        // Debugging
+        //PROCESSES[0].unwrap().processid();
+        //PROCESSES[1].unwrap().processid();
+    }
+}
+

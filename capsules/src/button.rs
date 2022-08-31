@@ -163,7 +163,7 @@ impl<'a, P: gpio::InterruptPin<'a>> SyscallDriver for Button<'a, P> {
                                 .enable_interrupts(gpio::InterruptEdge::EitherEdge);
                             CommandReturn::success()
                         })
-                        .unwrap_or_else(|err| CommandReturn::failure(err.into()))
+                        .unwrap_or_else(|err| { print!("Real error was {:?}\n", err); CommandReturn::failure(err.into())})
                 } else {
                     CommandReturn::failure(ErrorCode::INVAL) /* impossible button */
                 }
@@ -257,6 +257,7 @@ mod tests {
         config: Cell<gpio::Configuration>,
         client: OptionalCell<&'a dyn gpio::Client>,
         interrupts_enabled: Cell<bool>,
+        floating_state: Cell<gpio::FloatingState>,
     }
 
     impl<'a> FakeGPIO<'a> {
@@ -266,7 +267,16 @@ mod tests {
                 config: Cell::new(gpio::Configuration::Other),
                 client: OptionalCell::empty(),
                 interrupts_enabled: Cell::new(false),
+                floating_state: Cell::new(gpio::FloatingState::PullNone),
             }
+        }
+
+        fn assert_input(&self) {
+            assert!(self.config.get() == gpio::Configuration::Input || self.config.get() == gpio::Configuration::InputOutput);
+        }
+
+        fn assert_output(&self) {
+            assert!(self.config.get() == gpio::Configuration::Output || self.config.get() == gpio::Configuration::InputOutput);
         }
     }
 
@@ -276,12 +286,12 @@ mod tests {
         }
 
         fn enable_interrupts(&self, _: gpio::InterruptEdge) {
-            //XXX: check Config
+            self.assert_input();
             self.interrupts_enabled.set(true);
         }
 
         fn disable_interrupts(&self) {
-            //XXX: check Config
+            self.assert_input();
             self.interrupts_enabled.set(false);
         }
 
@@ -293,24 +303,24 @@ mod tests {
 
     impl gpio::Input for FakeGPIO<'_> {
         fn read(&self) -> bool {
-            //XXX: check Config
+            self.assert_input();
             self.state.get()
         }
     }
 
     impl gpio::Output for FakeGPIO<'_> {
         fn set(&self) {
-            //XXX: check Config
+            self.assert_output();
             self.state.set(true);
         }
 
         fn clear(&self) {
-            //XXX: check Config
+            self.assert_output();
             self.state.set(false);
         }
 
         fn toggle(&self) -> bool {
-            //XXX: check Config
+            self.assert_output();
             self.state.set(!self.state.get());
             self.state.get()
         }
@@ -339,21 +349,32 @@ mod tests {
         }
 
         fn make_input(&self) -> gpio::Configuration {
-            gpio::Configuration::Other
+            match self.config.get() {
+                gpio::Configuration::Output => self.config.set(gpio::Configuration::InputOutput),
+                _ => self.config.set(gpio::Configuration::Input),
+            }
+            self.config.get()
         }
 
         fn disable_input(&self) -> gpio::Configuration {
-            gpio::Configuration::Other
+            match self.config.get() {
+                gpio::Configuration::InputOutput => self.config.set(gpio::Configuration::Output),
+                gpio::Configuration::Input=>self.config.set(gpio::Configuration::Other),
+                _ => panic!("Tried to disable input for non-input pin"),
+            }
+            self.config.get()
         }
 
         fn deactivate_to_low_power(&self) {
+            self.config.set(gpio::Configuration::LowPower);
         }
 
         fn set_floating_state(&self, state: gpio::FloatingState) {
+            self.floating_state.set(state);
         }
 
         fn floating_state(&self) -> gpio::FloatingState {
-            gpio::FloatingState::PullNone
+            self.floating_state.get()
         }
     }
 
@@ -374,19 +395,34 @@ mod tests {
 
         // Create kernel resources for driver
         let board_kernel = kernel::testing::create_kernel();
+        kernel::testing::load_testing_processes(board_kernel);
         let grant = board_kernel.create_grant(DRIVER_NUM, &kernel::testing::TestingCap);
         let id = kernel::process::ProcessId::new_external(
             board_kernel,
-            usize::MAX,
-            usize::MAX,
+            0,
+            0,
             &kernel::testing::TestingCap,
         );
 
         // Create the Button driver
         let driver = Button::new(&driver_input, grant);
 
+        // Check number of buttons
         let result = driver.command(0, 0, 0, id);
         assert_eq!(result, CommandReturn::success_u32(3));
+
+        // Read a button
+        let result = driver.command(3, 0, 0, id);
+        assert_eq!(result, CommandReturn::success_u32(0));
+
+        // Read an out-of-bounds button
+        let result = driver.command(3, 3, 0, id);
+        assert_eq!(result, CommandReturn::failure(ErrorCode::INVAL));
+
+
+        // Enable interrupts for first button
+        let result = driver.command(1, 0, 0, id);
+        assert_eq!(result, CommandReturn::success_u32(0));
 
     }
 

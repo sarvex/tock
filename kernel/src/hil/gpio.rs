@@ -25,7 +25,7 @@ pub enum InterruptEdge {
 /// so this is a valid option. `Function` means the pin has been configured to
 /// a special function. Determining which function it outside the scope of the HIL,
 /// and should instead use a chip-specific API.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Configuration {
     /// Cannot be read or written or used; effectively inactive.
     LowPower,
