@@ -180,13 +180,17 @@ pub unsafe extern "C" fn svc_handler_arm_v7m() {
     bx lr
 
   100: // to_kernel
+
+
+
+
     // An application called a syscall. We mark this in the global variable
     // `SYSCALL_FIRED` which is stored in the syscall file.
     // `UserspaceKernelBoundary` will use this variable to decide why the app
     // stopped executing.
-    ldr r0, =SYSCALL_FIRED
-    mov r1, #1
-    str r1, [r0, #0]
+    ldr r0, =SYSCALL_FIRED            // r0 = address of SYSCALL_FIRED variable
+    mov r1, #1                        // r1 = 1
+    str r1, [r0, #0]                  // *SYSCALL_FIRED = 1
 
     // Set thread mode to privileged as we switch back to the kernel.
     mov r0, #0
