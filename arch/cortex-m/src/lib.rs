@@ -83,6 +83,8 @@ pub trait CortexMVariant {
     /// userspace and when userspace makes a system call.
     const SVC_HANDLER: unsafe extern "C" fn();
 
+    const PENDSV_HANDLER: unsafe extern "C" fn();
+
     /// Hard fault handler.
     const HARD_FAULT_HANDLER: unsafe extern "C" fn();
 
@@ -214,6 +216,44 @@ pub unsafe extern "C" fn svc_handler_arm_v7m() {
     movw LR, #0xFFF9                  // LR=0x0000FFF9
     movt LR, #0xFFFF                  // LR=0xFFFFFFF9
     bx lr                             // return from the exception handler
+    ",
+        options(noreturn)
+    );
+}
+
+/// Handler of PendSV exception on ARMv7-M.
+///
+/// For documentation of this function, please see
+/// [`CortexMVariant::PENDSV_HANDLER`].
+#[cfg(all(
+    target_arch = "arm",
+    target_feature = "v7",
+    target_feature = "thumb-mode",
+    target_os = "none"
+))]
+#[naked]
+pub unsafe extern "C" fn pendsv_handler_arm_v7m() {
+    use core::arch::asm;
+    asm!(
+        "
+
+
+    // Use the CONTROL register to set the thread mode to unprivileged to run
+    // the application.
+    mov r0, #1                        // r0 = 1
+    msr CONTROL, r0                   // CONTROL = 1
+    // CONTROL writes must be followed by an Instruction Synchronization Barrier
+    // (ISB). https://developer.arm.com/documentation/dai0321/latest
+    isb                               // synchronization barrier
+
+    // Return to thread mode with the process stack. This is done by putting the
+    // special value `0xFFFFFFFD` in the link register.
+    movw lr, #0xfffd
+    movt lr, #0xffff
+    // Switch to the app.
+    bx lr
+
+
     ",
         options(noreturn)
     );
@@ -433,6 +473,10 @@ pub unsafe fn switch_to_user_arm_v7m(
     movt r1, #0x1000                  // r1 = 0x10000000
     // Set the PENDSVSET bit
     str r0, [r1, #0]                  // *r0 = r1; NVIC.ICSR = (1<<28);
+
+
+    // my guess is this gets interrupted by the pendsv exception at this point
+
 
 
     svc 0xff   // It doesn't matter which SVC number we use here as it has no

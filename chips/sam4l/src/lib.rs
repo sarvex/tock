@@ -62,7 +62,7 @@ pub static BASE_VECTORS: [unsafe extern "C" fn(); 16] = [
     CortexM4::SVC_HANDLER, // SVC
     unhandled_interrupt,   // DebugMon
     unhandled_interrupt,
-    unhandled_interrupt,       // PendSV
+    CortexM4::PENDSV_HANDLER,  // PendSV
     CortexM4::SYSTICK_HANDLER, // SysTick
 ];
 
