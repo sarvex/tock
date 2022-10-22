@@ -161,25 +161,25 @@ pub unsafe extern "C" fn svc_handler_arm_v7m() {
     use core::arch::asm;
     asm!(
         "
-  //   // First check to see which direction we are going in. If the link register
-  //   // is something other than 0xfffffff9, then we are coming from an app which
-  //   // has called a syscall.
-  //   cmp lr, #0xfffffff9
-  //   bne 100f // to_kernel
+    // First check to see which direction we are going in. If the link register
+    // is something other than 0xfffffff9, then we are coming from an app which
+    // has called a syscall.
+    cmp lr, #0xfffffff9
+    bne 100f // to_kernel
 
-  //   // If we get here, then this is a context switch from the kernel to the
-  //   // application. Set thread mode to unprivileged to run the application.
-  //   mov r0, #1
-  //   msr CONTROL, r0
-  //   /* CONTROL writes must be followed by ISB */
-  //   /* http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dai0321a/BIHFJCAC.html */
-  //   isb
+    // If we get here, then this is a context switch from the kernel to the
+    // application. Set thread mode to unprivileged to run the application.
+    mov r0, #1
+    msr CONTROL, r0
+    /* CONTROL writes must be followed by ISB */
+    /* http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dai0321a/BIHFJCAC.html */
+    isb
 
-  //   // This is a special address to return Thread mode with Process stack
-  //   movw lr, #0xfffd
-  //   movt lr, #0xffff
-  //   // Switch to the app.
-  //   bx lr
+    // This is a special address to return Thread mode with Process stack
+    movw lr, #0xfffd
+    movt lr, #0xffff
+    // Switch to the app.
+    bx lr
 
   // 100: // to_kernel
 
@@ -236,6 +236,10 @@ pub unsafe extern "C" fn pendsv_handler_arm_v7m() {
     use core::arch::asm;
     asm!(
         "
+
+    // mov r0, #3
+    // mov r1, #99
+    // str r1, [r0]
 
 
     // Use the CONTROL register to set the thread mode to unprivileged to run
@@ -459,29 +463,32 @@ pub unsafe fn switch_to_user_arm_v7m(
     // register.
     ldmia r1, {{r4-r11}}              // r4=r1[0], r5=r1[1], r6=r1[2], ...
 
-    // Initiate the switch to userspace. Do this by setting the `PENDSVSET` bit
-    // to trigger a PendSV exception. From that exception we will switch to
-    // userspace. This allows us to ensure that all interrupts are handled
-    // before we do a context switch. See section 7.6 in The Definitive Guide to
-    // the ARM Cortex-M3 Section Edition for more information.
+    // // Initiate the switch to userspace. Do this by setting the `PENDSVSET` bit
+    // // to trigger a PendSV exception. From that exception we will switch to
+    // // userspace. This allows us to ensure that all interrupts are handled
+    // // before we do a context switch. See section 7.6 in The Definitive Guide to
+    // // the ARM Cortex-M3 Section Edition for more information.
+    // //
+    // // Load the Interrupt Control and State Register (ICSR) register address.
+    // movw r0, #0xed04                  // r0 = &NVIC.ICSR = 0x0000ed04
+    // movt r0, #0xe000                  // r0 = &NVIC.ICSR = 0xe000ed04
+    // // The PENDSVSET bit is number 28, need a one there.
+    // movw r1, #0x0000                  // r1 = 0
+    // movt r1, #0x1000                  // r1 = 0x10000000
+    // // Set the PENDSVSET bit
+    // str r1, [r0]                      // *r0 = r1; NVIC.ICSR = (1<<28);
+    // // https://interrupt.memfault.com/blog/arm-cortex-m-exceptions-and-nvic#pendsv-example
+    // isb
+    // // my guess is this gets interrupted by the pendsv exception at this point
+
+
+    // Now we need an exception so we can do a context switch to the application
+    // and return here when we context switch back to the kernel. We use the
+    // service call to generate that exception.
     //
-    // Load the Interrupt Control and State Register (ICSR) register address.
-    mov r0, #0xed04                   // r0 = &NVIC.ICSR = 0x0000ed04
-    movt r0, #0xe000                  // r0 = &NVIC.ICSR = 0xe000ed04
-    // The PENDSVSET bit is number 28, need a one there.
-    mov r1, 0                         // r1 = 0
-    movt r1, #0x1000                  // r1 = 0x10000000
-    // Set the PENDSVSET bit
-    str r0, [r1, #0]                  // *r0 = r1; NVIC.ICSR = (1<<28);
-
-
-    // my guess is this gets interrupted by the pendsv exception at this point
-
-
-
-    svc 0xff   // It doesn't matter which SVC number we use here as it has no
-               // defined meaning for the Cortex-M syscall interface. Data being
-               // returned from a syscall is transferred on the app's stack.
+    // It doesn't matter which SVC number we use here as we don't use it in the
+    // SVC handler.
+    svc 0xff
 
     // When execution returns here we have switched back to the kernel from the
     // application.

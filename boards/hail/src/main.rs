@@ -484,10 +484,11 @@ pub unsafe fn main() {
     // peripherals.pa[16].set_client(debug_process_restart);
 
     // Configure application fault policy
-    let fault_policy = static_init!(
-        kernel::process::ThresholdRestartThenPanicFaultPolicy,
-        kernel::process::ThresholdRestartThenPanicFaultPolicy::new(4)
-    );
+    // let fault_policy = static_init!(
+    //     kernel::process::ThresholdRestartThenPanicFaultPolicy,
+    //     kernel::process::ThresholdRestartThenPanicFaultPolicy::new(4)
+    // );
+    let fault_policy = &kernel::process::PanicFaultPolicy {};
 
     let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
         .finalize(components::round_robin_component_static!(NUM_PROCS));
