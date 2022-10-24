@@ -159,25 +159,84 @@ pub unsafe extern "C" fn systick_handler_arm_v7m() {
 #[naked]
 pub unsafe extern "C" fn svc_handler_arm_v7m() {
     use core::arch::asm;
+
+    // This exception handler is executed when switching from userspace to the
+    // kernel AND when switching from the kernel to userspace. Userspace invokes
+    // a syscall by calling the `svc` instruction, as is typical, and that will
+    // cause this handler to execute. To switch from the kernel to userspace we
+    // _also_ use this handler, as we need an exception that we can return from
+    // to instruct the CPU to do the proper context switch.
+    //
+    // By using this handler in both "directions" we need some mechanism to
+    // distinguish which "direction" we are going in. We do that with the
+    // `KERNEL_TO_USERSPACE` global `u32` variable. If the variable is 0, then
+    // we are not switching from kernel to userspace. If the variable is 1 (or
+    // any other nonzero value), then we are switching from the kernel to
+    // userspace.
+    //
+    // Originally, we used the link register to determine which direction we
+    // were intending to go in this handler. That is, if `LR==0xfffffff9`, then
+    // we were doing a context switch to userspace, otherwise this is a syscall
+    // from userspace switching to the kernel. However, that ended up being
+    // unreliable, and we switched to using our own flag instead.
     asm!(
         "
-    // First check to see which direction we are going in. If the link register
-    // is something other than 0xfffffff9, then we are coming from an app which
-    // has called a syscall.
-    cmp lr, #0xfffffff9
-    bne 100f // to_kernel
+
+    // First we have to check which direction we are going in. If
+    // `KERNEL_TO_USERSPACE` is zero, then we are NOT switching to userspace,
+    // and instead need to go to the kernel. Otherwise, we are switching to
+    // userspace.
+    ldr r0, =KERNEL_TO_USERSPACE      // r0 = &KERNEL_TO_USERSPACE
+    ldr r1, [r0]                      // r1 = *KERNEL_TO_USERSPACE
+    cmp r1, #0                        // check if KERNEL_TO_USERSPACE==0
+    beq 100f                          // (KERNEL_TO_USERSPACE==0)==true, jump to to_kernel
+
+
+
+
+
+
+    // // First check to see which direction we are going in. If the link register
+    // // is something other than 0xfffffff9, then we are coming from an app which
+    // // has called a syscall.
+    // cmp lr, #0xfffffff9
+    // bne 100f // to_kernel
+
+    // // If we get here, then this is a context switch from the kernel to the
+    // // application. Set thread mode to unprivileged to run the application.
+    // mov r0, #1
+    // msr CONTROL, r0
+    // /* CONTROL writes must be followed by ISB */
+    // /* http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dai0321a/BIHFJCAC.html */
+    // isb
 
     // If we get here, then this is a context switch from the kernel to the
-    // application. Set thread mode to unprivileged to run the application.
-    mov r0, #1
-    msr CONTROL, r0
-    /* CONTROL writes must be followed by ISB */
-    /* http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dai0321a/BIHFJCAC.html */
-    isb
+    // application.
+
+    // Reset the `KERNEL_TO_USERSPACE` variable, now that we are switching to
+    // userspace. `&KERNEL_TO_USERSPACE` is already in r0.
+    mov r1, #0                        // r1 = 0
+    str r1, [r0]                      // *KERNEL_TO_USERSPACE = 0
+
+    // Use the CONTROL register to set the thread mode to unprivileged to run
+    // the application.
+    //
+    // CONTROL[1]: Stack status
+    //   0 = Default stack (MSP) is used
+    //   1 = Alternate stack is used
+    // CONTROL[0]: Mode
+    //   0 = Privileged in thread mode
+    //   1 = User state in thread mode
+    mov r0, #1                        // r0 = 1
+    msr CONTROL, r0                   // CONTROL = 1
+    // CONTROL writes must be followed by an Instruction Synchronization Barrier
+    // (ISB). https://developer.arm.com/documentation/dai0321/latest
+    isb                               // synchronization barrier
 
     // This is a special address to return Thread mode with Process stack
-    movw lr, #0xfffd
-    movt lr, #0xffff
+    // movw lr, #0xfffd
+    // movt lr, #0xffff
+    ldr lr, #0xfffffffd
     // Switch to the app.
     bx lr
 
@@ -480,6 +539,12 @@ pub unsafe fn switch_to_user_arm_v7m(
     // // https://interrupt.memfault.com/blog/arm-cortex-m-exceptions-and-nvic#pendsv-example
     // isb
     // // my guess is this gets interrupted by the pendsv exception at this point
+
+
+    ldr r0, =KERNEL_TO_USERSPACE      // r0 = &KERNEL_TO_USERSPACE
+    mov r1, #1                        // r1 = 1
+    str r1, [r0, #0]                  // *KERNEL_TO_USERSPACE = 1
+
 
 
     // Now we need an exception so we can do a context switch to the application
