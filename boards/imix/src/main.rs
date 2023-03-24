@@ -11,13 +11,13 @@
 
 mod imix_components;
 use capsules_core::alarm::AlarmDriver;
+use capsules_core::console_ordered::ConsoleOrdered;
 use capsules_core::virtualizers::virtual_aes_ccm::MuxAES128CCM;
 use capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm;
 use capsules_core::virtualizers::virtual_i2c::MuxI2C;
 use capsules_core::virtualizers::virtual_spi::VirtualSpiMasterDevice;
 use capsules_extra::net::ieee802154::MacAddress;
 use capsules_extra::net::ipv6::ip_utils::IPAddr;
-//use capsules_core::virtualizers::virtual_timer::MuxTimer;
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::deferred_call::DeferredCallClient;
@@ -42,7 +42,7 @@ use capsules_extra::sha256::Sha256Software;
 
 use components;
 use components::alarm::{AlarmDriverComponent, AlarmMuxComponent};
-use components::console::{ConsoleComponent, UartMuxComponent};
+use components::console::{ConsoleOrderedComponent, UartMuxComponent};
 use components::crc::CrcComponent;
 use components::debug_writer::DebugWriterComponent;
 use components::gpio::GpioComponent;
@@ -125,7 +125,10 @@ struct Imix {
         >,
         components::process_console::Capability,
     >,
-    console: &'static capsules_core::console::Console<'static>,
+    console: &'static capsules_core::console_ordered::ConsoleOrdered<
+        'static,
+        VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>,
+    >,
     gpio: &'static capsules_core::gpio::GPIO<'static, sam4l::gpio::GPIOPin<'static>>,
     alarm: &'static AlarmDriver<'static, VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>>,
     temp: &'static capsules_extra::temperature::TemperatureSensor<'static>,
@@ -184,7 +187,7 @@ impl SyscallDriverLookup for Imix {
         F: FnOnce(Option<&dyn kernel::syscall::SyscallDriver>) -> R,
     {
         match driver_num {
-            capsules_core::console::DRIVER_NUM => f(Some(self.console)),
+            capsules_core::console_ordered::DRIVER_NUM => f(Some(self.console)),
             capsules_core::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules_core::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi)),
@@ -399,6 +402,7 @@ pub unsafe fn main() {
     let mux_alarm = AlarmMuxComponent::new(&peripherals.ast)
         .finalize(components::alarm_mux_component_static!(sam4l::ast::Ast));
     peripherals.ast.configure(mux_alarm);
+
     let alarm =
         AlarmDriverComponent::new(board_kernel, capsules_core::alarm::DRIVER_NUM, mux_alarm)
             .finalize(components::alarm_component_static!(sam4l::ast::Ast));
@@ -413,8 +417,18 @@ pub unsafe fn main() {
     .finalize(components::process_console_component_static!(
         sam4l::ast::Ast
     ));
-    let console = ConsoleComponent::new(board_kernel, capsules_core::console::DRIVER_NUM, uart_mux)
-        .finalize(components::console_component_static!());
+
+    let console = ConsoleOrderedComponent::new(
+        board_kernel,
+        capsules_core::console_ordered::DRIVER_NUM,
+        mux_alarm,
+        200,
+        20,
+        20,
+    )
+    .finalize(components::console_ordered_component_static!(
+        sam4l::ast::Ast
+    ));
     DebugWriterComponent::new(uart_mux).finalize(components::debug_writer_component_static!());
 
     // Allow processes to communicate over BLE through the nRF51822
