@@ -75,7 +75,7 @@ COMMENT_MAX_LENGTH = 80
 def comment(text):
     if text:
         lines = text.split ("\n")
-        lines = ["/// {}".format(line[:COMMENT_MAX_LENGTH].strip()) for line in lines]
+        lines = [f"/// {line[:COMMENT_MAX_LENGTH].strip()}" for line in lines]
         return "\n".join (lines)
     else:
         return ""
@@ -187,9 +187,7 @@ class PeripheralStructField(CodeBlock):
             return identifier
 
         def definition(reg):
-            if len(reg._fields) == 1:
-                return ""
-            return ", {}::Register".format(reg.name)
+            return "" if len(reg._fields) == 1 else ", {}::Register".format(reg.name)
 
         mode_map = {
             "read-only": "ReadOnly",
@@ -268,7 +266,7 @@ class BitfieldField(CodeBlock):
         else:
             enums = ",\n".join(BitfieldFieldEnum(enum)
                                for enum in BitfieldField.enumerated_values(field))
-            enums = "[\n{}\n    ]".format(enums)
+            enums = f"[\n{enums}\n    ]"
         return {
             "comment": comment(field.description),
             "name": field.name,
@@ -309,7 +307,7 @@ class BitfieldFieldEnum(CodeBlock):
 def get_parser(mcu, svd):
     try:
         if mcu:
-            return SVDParser.for_packaged_svd(mcu[0], "{}.svd".format(mcu[1]))
+            return SVDParser.for_packaged_svd(mcu[0], f"{mcu[1]}.svd")
         return SVDParser(ET.ElementTree(ET.fromstring(svd.read())))
     except IOError:
         print("No SVD file found")
@@ -329,7 +327,7 @@ def parse(peripheral_name, mcu, svd, group):
 def generate(name, peripherals, dev):
     peripherals = list(peripherals)
 
-    if len(peripherals) == 0:
+    if not peripherals:
         print('Error: no peripheral found.')
         return ''
 
@@ -342,14 +340,11 @@ def generate(name, peripherals, dev):
 
 
 def generate_bitfields_macro(registers):
-    if registers:
-        return BitfieldsMacro(registers)
-    return ""
+    return BitfieldsMacro(registers) if registers else ""
 
 
 def rustfmt(code, path, *args):
-    cmd = ["{}rustfmt".format(path)]
-    cmd.extend(args)
+    cmd = [f"{path}rustfmt", *args]
     fmt = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     out, err = fmt.communicate(code)
     if err:

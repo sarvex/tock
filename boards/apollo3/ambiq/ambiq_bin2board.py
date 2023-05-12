@@ -102,14 +102,22 @@ def bin2blob_process(loadaddress, appFile, magicNum, crcI, crcB, authI, authB, p
             keySize = 32
         else:
             keySize = 16
-    if (authalgo != 0):
-        if ((authKeyIdx < minHmacKeyIdx) or (authKeyIdx > maxHmacKeyIdx) or (authKeyIdx & 0x1)):
-            am_print("Invalid authKey Idx ", authKeyIdx, level=AM_PRINT_LEVEL_ERROR);
-            return
+    if (authalgo != 0) and (
+        (authKeyIdx < minHmacKeyIdx)
+        or (authKeyIdx > maxHmacKeyIdx)
+        or (authKeyIdx & 0x1)
+    ):
+        am_print("Invalid authKey Idx ", authKeyIdx, level=AM_PRINT_LEVEL_ERROR);
+        return
 
     if (magicNum == AM_IMAGE_MAGIC_MAIN):
         hdr_length  = AM_IMAGEHDR_SIZE_MAIN;   #fixed header length
-    elif ((magicNum == AM_IMAGE_MAGIC_CHILD) or (magicNum == AM_IMAGE_MAGIC_CUSTPATCH) or (magicNum == AM_IMAGE_MAGIC_NONSECURE) or (magicNum == AM_IMAGE_MAGIC_INFO0)):
+    elif magicNum in [
+        AM_IMAGE_MAGIC_CHILD,
+        AM_IMAGE_MAGIC_CUSTPATCH,
+        AM_IMAGE_MAGIC_NONSECURE,
+        AM_IMAGE_MAGIC_INFO0,
+    ]:
         hdr_length  = AM_IMAGEHDR_SIZE_AUX;   #fixed header length
     else:
         am_print("magic number", hex(magicNum), " not supported", level=AM_PRINT_LEVEL_ERROR)
@@ -141,7 +149,7 @@ def bin2blob_process(loadaddress, appFile, magicNum, crcI, crcB, authI, authB, p
     else:
         # Add Padding
         app_binarray = pad_to_block_size(app_binarray, 4, 0)
-    
+
     app_length  = (len(app_binarray))
     am_print("app_size ",hex(app_length), "(",app_length,")")
 
@@ -153,14 +161,14 @@ def bin2blob_process(loadaddress, appFile, magicNum, crcI, crcB, authI, authB, p
 
     am_print("w0 =", hex(w0))
     fill_word(hdr_binarray, 0, w0)
-        
+
     # w2
     securityVal = ((authI << 1) | crcI) << 4 | (authB << 1) | crcB
     am_print("Security Value ", hex(securityVal))
     w2 = ((securityVal << 24) & 0xff000000) | ((authalgo) & 0xf) | ((authKeyIdx << 4) & 0xf0) | ((encalgo << 8) & 0xf00) | ((encKeyIdx << 12) & 0xf000)
     fill_word(hdr_binarray, 8, w2)
     am_print("w2 = ",hex(w2))
-    
+
 
     if (magicNum == AM_IMAGE_MAGIC_INFO0):
         # Insert the INFO0 size and offset
@@ -244,11 +252,11 @@ def bin2blob_process(loadaddress, appFile, magicNum, crcI, crcB, authI, authB, p
     fill_word(hdr_binarray, AM_IMAGEHDR_OFFSET_CRC, w1)
 
     # now output all three binary arrays in the proper order
-    output = output + '_OTA_blob.bin'
+    output = f'{output}_OTA_blob.bin'
     blob2wiredfile = output # save the output of bin2blob for use by blob2wired
     am_print("Writing to file ", output)
     with open(output, mode = 'wb') as out:
-        out.write(hdr_binarray[0:AM_IMAGEHDR_START_ENCRYPT])
+        out.write(hdr_binarray[:AM_IMAGEHDR_START_ENCRYPT])
         out.write(enc_binarray)
 
 
@@ -262,7 +270,7 @@ def blob2wired_process(appFile, imagetype, loadaddress, authalgo, encalgo, authK
 
     app_binarray = bytearray()
     # Open the file, and read it into an array of integers.
-    print('testing: ' + appFile )
+    print(f'testing: {appFile}')
     with open(appFile,'rb') as f_app:
         app_binarray.extend(f_app.read())
         f_app.close()
@@ -283,12 +291,15 @@ def blob2wired_process(appFile, imagetype, loadaddress, authalgo, encalgo, authK
             keySize = 32
         else:
             keySize = 16
-    if (authalgo != 0):
-        if ((authKeyIdx < minHmacKeyIdx) or (authKeyIdx > maxHmacKeyIdx) or (authKeyIdx & 0x1)):
-            am_print("Invalid authKey Idx ", authKeyIdx, level=AM_PRINT_LEVEL_ERROR);
-            return
+    if (authalgo != 0) and (
+        (authKeyIdx < minHmacKeyIdx)
+        or (authKeyIdx > maxHmacKeyIdx)
+        or (authKeyIdx & 0x1)
+    ):
+        am_print("Invalid authKey Idx ", authKeyIdx, level=AM_PRINT_LEVEL_ERROR);
+        return
 
-    hdr_length  = AM_WU_IMAGEHDR_SIZE;   #fixed header length
+    hdr_length  = AM_WU_IMAGEHDR_SIZE
     am_print("Header Size = ", hex(hdr_length))
 
     orig_app_length  = (len(app_binarray))
@@ -299,7 +310,7 @@ def blob2wired_process(appFile, imagetype, loadaddress, authalgo, encalgo, authK
     else:
         # Add Padding
         app_binarray = pad_to_block_size(app_binarray, 4, 0)
-    
+
     app_length  = (len(app_binarray))
     am_print("app_size ",hex(app_length), "(",app_length,")")
 
@@ -308,19 +319,15 @@ def blob2wired_process(appFile, imagetype, loadaddress, authalgo, encalgo, authK
 
     start = 0
     # now output all three binary arrays in the proper order
-    output = output + '_Wired_OTA_blob.bin'
-    uploadbinfile = output; # save the name of the output from blob2wired
+    output = f'{output}_Wired_OTA_blob.bin'
+    uploadbinfile = output
     out = open(output, mode = 'wb')
 
     while (start < app_length):
         #generate mutable byte array for the header
         hdr_binarray = bytearray([0x00]*hdr_length);
 
-        if (app_length - start > maxSize):
-            end = start + maxSize
-        else:
-            end = app_length
-
+        end = start + maxSize if (app_length - start > maxSize) else app_length
         if (imagetype == AM_SECBOOT_WIRED_IMAGETYPE_INFO0_NOOTA):
             key = INFO_KEY
             # word offset
@@ -332,11 +339,7 @@ def blob2wired_process(appFile, imagetype, loadaddress, authalgo, encalgo, authK
         # Create imageType & options
         hdr_binarray[AM_WU_IMAGEHDR_OFFSET_IMAGETYPE] = imagetype
         # Set the options only for the first block
-        if (start == 0):
-            hdr_binarray[AM_WU_IMAGEHDR_OFFSET_OPTIONS] = optionsVal
-        else:
-            hdr_binarray[AM_WU_IMAGEHDR_OFFSET_OPTIONS] = 0
-
+        hdr_binarray[AM_WU_IMAGEHDR_OFFSET_OPTIONS] = optionsVal if (start == 0) else 0
         # Create Info0 Update Blob for wired update
         fill_word(hdr_binarray, AM_WU_IMAGEHDR_OFFSET_KEY, key)
         # update size
@@ -385,8 +388,15 @@ def blob2wired_process(appFile, imagetype, loadaddress, authalgo, encalgo, authK
                 hdr_binarray[AM_WU_IMAGEHDR_OFFSET_SIG + x]  = sig[x]
 
         am_print("Writing to file ", output)
-        am_print("Image from ", str(hex(start)), " to ", str(hex(end)), " will be loaded at", str(hex(loadaddress))) 
-        out.write(hdr_binarray[0:AM_WU_IMAGEHDR_START_ENCRYPT])
+        am_print(
+            "Image from ",
+            hex(start),
+            " to ",
+            hex(end),
+            " will be loaded at",
+            hex(loadaddress),
+        )
+        out.write(hdr_binarray[:AM_WU_IMAGEHDR_START_ENCRYPT])
         out.write(enc_binarray)
 
         # Reset start for next chunk
@@ -416,7 +426,7 @@ def upload(args, verboseprint):
 
     connection_timeout = 5
 
-    print('Connecting over serial port {}...'.format(args.port), flush=True)
+    print(f'Connecting over serial port {args.port}...', flush=True)
 
     #Check to see if the com port is available
     try: 
@@ -432,13 +442,19 @@ def upload(args, verboseprint):
             print(dev.description)
             # The SparkFun BlackBoard has CH340 in the description
             if 'CH340' in dev.description:
-                print("The port you selected was not found. But we did detect a CH340 on " + dev.device + " so you might try again on that port.")
+                print(
+                    f"The port you selected was not found. But we did detect a CH340 on {dev.device} so you might try again on that port."
+                )
                 break
             elif 'FTDI' in dev.description:
-                print("The port you selected was not found. But we did detect an FTDI on " + dev.device + " so you might try again on that port.")
+                print(
+                    f"The port you selected was not found. But we did detect an FTDI on {dev.device} so you might try again on that port."
+                )
                 break
             elif 'USB Serial Device' in dev.description:
-                print("The port you selected was not found. But we did detect a USB Serial Device on " + dev.device + " so you might try again on that port.")
+                print(
+                    f"The port you selected was not found. But we did detect a USB Serial Device on {dev.device} so you might try again on that port."
+                )
                 break
         else: 
             print("Com Port not found - Did you select the right one?")
@@ -471,15 +487,15 @@ def upload(args, verboseprint):
 
             connect_device(ser, args, verboseprint)
 
-            if(loadSuccess == True):
+            if loadSuccess:
                 print("Tries =", loadTries)
                 print('Upload complete!')
                 exit()
             else:
                 print("Fail")
-            
+
             loadTries = loadTries + 1
-            
+
     print("Tries =", loadTries)
     print("Upload failed")
     exit()
@@ -572,11 +588,20 @@ def connect_device(ser, args, verboseprint):
             verboseprint("number of updates needed = ", numUpdates)
 
             end = totalLen
+            # Loop over the bytes in the image, and send them to the target.
+            resp = 0
             for numUpdates in range(numUpdates, 0 , -1):
                 start = (numUpdates-1)*maxUpdateSize
                 crc = crc32(application[start:end])
                 applen = end - start
-                verboseprint("Sending block of size ", str(hex(applen)), " from ", str(hex(start)), " to ", str(hex(end)))
+                verboseprint(
+                    "Sending block of size ",
+                    hex(applen),
+                    " from ",
+                    hex(start),
+                    " to ",
+                    hex(end),
+                )
                 end = end - applen
 
                 update = bytearray([0x00]*16);
@@ -590,8 +615,6 @@ def connect_device(ser, args, verboseprint):
                     verboseprint("Failed to ack command")
                     return
 
-                # Loop over the bytes in the image, and send them to the target.
-                resp = 0
                 # Max chunk size is AM_MAX_UART_MSG_SIZE adjusted for the header for Data message
                 maxChunkSize = AM_MAX_UART_MSG_SIZE - 12
                 for x in range(0, applen, maxChunkSize):
@@ -638,7 +661,7 @@ def connect_device(ser, args, verboseprint):
                 verboseprint("Failed to ack command")
                 return
 
-        
+
         #Success! We're all done
         loadSuccess = True
     else:
@@ -669,17 +692,17 @@ def send_ackd_command(command, ser, verboseprint):
         return False #Return error
 
     word = word_from_bytes(response, 4)
-    if ((word & 0xFFFF) == AM_SECBOOT_WIRED_MSGTYPE_ACK):
-        # Received ACK
-        if (word_from_bytes(response, 12) != AM_SECBOOT_WIRED_ACK_STATUS_SUCCESS):
-            verboseprint("Received NACK")
-            verboseprint("msgType = ", hex(word_from_bytes(response, 8)))
-            verboseprint("error = ", hex(word_from_bytes(response, 12)))
-            verboseprint("seqNo = ", hex(word_from_bytes(response, 16)))
-            #print("!!!Wired Upgrade Unsuccessful!!!....Terminating the script")
-            verboseprint("Upload failed: No ack to command")
+    if ((word & 0xFFFF) == AM_SECBOOT_WIRED_MSGTYPE_ACK) and (
+        word_from_bytes(response, 12) != AM_SECBOOT_WIRED_ACK_STATUS_SUCCESS
+    ):
+        verboseprint("Received NACK")
+        verboseprint("msgType = ", hex(word_from_bytes(response, 8)))
+        verboseprint("error = ", hex(word_from_bytes(response, 12)))
+        verboseprint("seqNo = ", hex(word_from_bytes(response, 16)))
+        #print("!!!Wired Upgrade Unsuccessful!!!....Terminating the script")
+        verboseprint("Upload failed: No ack to command")
 
-            return False #Return error
+        return False #Return error
 
     return response
 
@@ -758,8 +781,14 @@ def parse_arguments():
     parser.add_argument('-a', dest = 'abort', default=-1, type=int, choices = [0,1,-1],
                         help = 'upload: Should it send abort command? (0 = abort, 1 = abort and quit, -1 = no abort) (default is -1)')
 
-    parser.add_argument('--authalgo', dest = 'authalgo', type=auto_int, default=0, choices=range(0, AM_SECBOOT_AUTH_ALGO_MAX+1),
-                        help = 'bin2blob, blob2wired: ' + str(helpAuthAlgo))
+    parser.add_argument(
+        '--authalgo',
+        dest='authalgo',
+        type=auto_int,
+        default=0,
+        choices=range(0, AM_SECBOOT_AUTH_ALGO_MAX + 1),
+        help=f'bin2blob, blob2wired: {str(helpAuthAlgo)}',
+    )
 
     parser.add_argument('--authI', dest = 'authI', type=auto_int, default=0, choices=[0,1],
                         help = 'bin2blob: Install Authentication check enabled (Default = N)?')
@@ -767,8 +796,14 @@ def parse_arguments():
     parser.add_argument('--authB', dest = 'authB', type=auto_int, default=0, choices=[0,1],
                         help = 'bin2blob: Boot Authentication check enabled (Default = N)?')
 
-    parser.add_argument('--authkey', dest = 'authkey', type=auto_int, default=(minHmacKeyIdx), choices = range(minHmacKeyIdx, maxHmacKeyIdx + 1),
-                        help = 'bin2blob, blob2wired: Authentication Key Idx? (' + str(minHmacKeyIdx) + ' to ' + str(maxHmacKeyIdx) + ')')
+    parser.add_argument(
+        '--authkey',
+        dest='authkey',
+        type=auto_int,
+        default=(minHmacKeyIdx),
+        choices=range(minHmacKeyIdx, maxHmacKeyIdx + 1),
+        help=f'bin2blob, blob2wired: Authentication Key Idx? ({str(minHmacKeyIdx)} to {str(maxHmacKeyIdx)})',
+    )
 
     parser.add_argument('-b', dest='baud', default=115200, type=int,
                         help = 'upload: Baud Rate (default is 115200)')
@@ -791,8 +826,14 @@ def parse_arguments():
     parser.add_argument('--crcB', dest = 'crcB', type=auto_int, default=0, choices=[0,1],
                         help = 'bin2blob: Boot CRC check enabled (Default = N)?')
 
-    parser.add_argument('--encalgo', dest = 'encalgo', type=auto_int, default=0, choices = range(0, AM_SECBOOT_ENC_ALGO_MAX+1),
-                        help = 'bin2blob, blob2wired: ' + str(helpEncAlgo))
+    parser.add_argument(
+        '--encalgo',
+        dest='encalgo',
+        type=auto_int,
+        default=0,
+        choices=range(0, AM_SECBOOT_ENC_ALGO_MAX + 1),
+        help=f'bin2blob, blob2wired: {str(helpEncAlgo)}',
+    )
 
     parser.add_argument('--erasePrev', dest = 'erasePrev', type=auto_int, default=0, choices=[0,1],
                         help = 'bin2blob: erasePrev (Valid only for main)')
@@ -826,8 +867,14 @@ def parse_arguments():
                                 + str(AM_SECBOOT_WIRED_IMAGETYPE_INVALID) + ': Invalid) '
                                 '- default[Invalid]')
 
-    parser.add_argument('--kek', dest = 'kek', type=auto_int, default=(minAesKeyIdx), choices = range(minAesKeyIdx, maxAesKeyIdx+1),
-                        help = 'KEK index? (' + str(minAesKeyIdx) + ' to ' + str(maxAesKeyIdx) + ')')
+    parser.add_argument(
+        '--kek',
+        dest='kek',
+        type=auto_int,
+        default=(minAesKeyIdx),
+        choices=range(minAesKeyIdx, maxAesKeyIdx + 1),
+        help=f'KEK index? ({str(minAesKeyIdx)} to {str(maxAesKeyIdx)})',
+    )
 
     parser.add_argument('--load-address-wired', dest='loadaddress_blob', type=auto_int, default=hex(0x60000),
                         help='blob2wired: Load address of the binary - Where in flash the blob will be stored (could be different than install address of binary within).')
@@ -835,35 +882,40 @@ def parse_arguments():
     parser.add_argument('--load-address-blob', dest='loadaddress_image', type=auto_int, default=hex(AM_SECBOOT_DEFAULT_NONSECURE_MAIN),
                         help='bin2blob: Load address of the binary.')
 
-    parser.add_argument('--loglevel', dest='loglevel', type=auto_int, default=AM_PRINT_LEVEL_INFO,
-                        choices = range(AM_PRINT_LEVEL_MIN, AM_PRINT_LEVEL_MAX+1),
-                        help='bin2blob, blob2wired: ' + str(helpPrintLevel))
+    parser.add_argument(
+        '--loglevel',
+        dest='loglevel',
+        type=auto_int,
+        default=AM_PRINT_LEVEL_INFO,
+        choices=range(AM_PRINT_LEVEL_MIN, AM_PRINT_LEVEL_MAX + 1),
+        help=f'bin2blob, blob2wired: {str(helpPrintLevel)}',
+    )
 
-    parser.add_argument('--magic-num', dest='magic_num', default=hex(AM_IMAGE_MAGIC_NONSECURE),
-                        type=lambda x: x.lower(),
-#                        type = str.lower,
-                        choices = [
-                                hex(AM_IMAGE_MAGIC_MAIN),
-                                hex(AM_IMAGE_MAGIC_CHILD),
-                                hex(AM_IMAGE_MAGIC_CUSTPATCH),
-                                hex(AM_IMAGE_MAGIC_NONSECURE),
-                                hex(AM_IMAGE_MAGIC_INFO0)
-                                ],
-                        help = 'bin2blob: Magic Num ('
-                                + str(hex(AM_IMAGE_MAGIC_MAIN)) + ': Main, '
-                                + str(hex(AM_IMAGE_MAGIC_CHILD)) + ': Child, '
-                                + str(hex(AM_IMAGE_MAGIC_CUSTPATCH)) + ': CustOTA, '
-                                + str(hex(AM_IMAGE_MAGIC_NONSECURE)) + ': NonSecure, '
-                                + str(hex(AM_IMAGE_MAGIC_INFO0)) + ': Info0) '
-                                '- default[Main]'
-                                )
+    parser.add_argument(
+        '--magic-num',
+        dest='magic_num',
+        default=hex(AM_IMAGE_MAGIC_NONSECURE),
+        type=lambda x: x.lower(),
+        choices=[
+            hex(AM_IMAGE_MAGIC_MAIN),
+            hex(AM_IMAGE_MAGIC_CHILD),
+            hex(AM_IMAGE_MAGIC_CUSTPATCH),
+            hex(AM_IMAGE_MAGIC_NONSECURE),
+            hex(AM_IMAGE_MAGIC_INFO0),
+        ],
+        help=(
+            f'bin2blob: Magic Num ({hex(AM_IMAGE_MAGIC_MAIN)}: Main, {hex(AM_IMAGE_MAGIC_CHILD)}: Child, {hex(AM_IMAGE_MAGIC_CUSTPATCH)}: CustOTA, {hex(AM_IMAGE_MAGIC_NONSECURE)}: NonSecure, {hex(AM_IMAGE_MAGIC_INFO0)}'
+            + ': Info0) '
+            '- default[Main]'
+        ),
+    )
 
     parser.add_argument('-o', dest = 'output', default='wuimage',
                     help = 'all: Output filename (without the extension) [also used for intermediate filenames]')
 
     parser.add_argument('-ota', dest = 'otadesc', type=auto_int, default=0xFE000,
                         help = 'upload: OTA Descriptor Page address (hex) - (Default is 0xFE000 - at the end of main flash) - enter 0xFFFFFFFF to instruct SBL to skip OTA')
-    
+
     parser.add_argument('--options', dest = 'options', type=auto_int, default=0x1,
                         help = 'blob2wired: Options (16b hex value) - bit0 instructs to perform OTA of the image after wired download (set to 0 if only downloading & skipping OTA flow)')
 

@@ -19,6 +19,7 @@ Example:
 ```
 '''
 
+
 import os
 import re
 
@@ -48,7 +49,7 @@ for subdir, dirs, files in os.walk(os.fsencode('kernel/src/hil/')):
 						items = re.findall(r"[A-Za-z0-9]+|\S", l)
 
 						hil_name = items[2]
-						if not 'Client' in hil_name:
+						if 'Client' not in hil_name:
 							hils[hil_name] = {'module': mod, 'chips': []}
 
 chips = []
@@ -74,27 +75,25 @@ for subdir, dirs, files in os.walk(os.fsencode('chips/')):
 
 						# Check each HIL to see if this `impl` line implements
 						# that HIL.
-						for hil in hils.keys():
+						for hil, value in hils.items():
 							for item in items:
 								if item == hil:
-									hils[hil]['chips'].append(chip)
+									value['chips'].append(chip)
 									break
 
 # Calculate chips that should be ignored since they only support other chips.
 subsumed = []
-for k,v in SUBSUMES.items():
+for v in SUBSUMES.values():
 	subsumed += v
 
 # Get only proper chips that are not just crates that support other chips.
 chips = set(chips).difference(subsumed)
 
 # Setup table and add the header row.
-table = []
-table.append(['HIL', *sorted(chips)])
-
+table = [['HIL', *sorted(chips)]]
 # Add rows to the table, one row for each HIL.
-for k,v in sorted(hils.items(), key=lambda x: '{}::{}'.format(x[1]['module'], x[0])):
-	row = ['{}::{}'.format(v['module'], k)]
+for k,v in sorted(hils.items(), key=lambda x: f"{x[1]['module']}::{x[0]}"):
+	row = [f"{v['module']}::{k}"]
 
 	# Skip any HILs that have no chip support. These are likely not HILs
 	# that hardware chips implement.

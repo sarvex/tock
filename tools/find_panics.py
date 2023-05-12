@@ -117,10 +117,7 @@ def matches_panic_funcs(name):
     """If the passed name contains one of the known panic_functions,
     return the match
     """
-    for func in panic_functions:
-        if func in name:
-            return func
-    return ""
+    return next((func for func in panic_functions if func in name), "")
 
 
 def linkage_or_origin_all_parents(elf, addr, linkage=False):
@@ -128,7 +125,9 @@ def linkage_or_origin_all_parents(elf, addr, linkage=False):
     location for the passed address
     """
     result = subprocess.run(
-        (DWARFDUMP, "--lookup=0x" + addr, "-p", elf), capture_output=True, text=True
+        (DWARFDUMP, f"--lookup=0x{addr}", "-p", elf),
+        capture_output=True,
+        text=True,
     )
     dwarfdump = result.stdout
     regex = abstract_origin_re
@@ -149,8 +148,7 @@ def any_origin_matches_panic_func(elf, addr):
     """
     origins = linkage_or_origin_all_parents(elf, addr)
     for origin in origins:
-        name = matches_panic_funcs(origin)
-        if name:
+        if name := matches_panic_funcs(origin):
             return name
     return ""
 
@@ -161,8 +159,7 @@ def any_linkage_matches_panic_func(elf, addr):
     """
     linkages = linkage_or_origin_all_parents(elf, addr, True)
     for linkage in linkages:
-        name = matches_panic_funcs(linkage)
-        if name:
+        if name := matches_panic_funcs(linkage):
             return name
     return ""
 
@@ -174,7 +171,9 @@ def check_for_source_in_parent(elf, addr):
     in the Tock source code.
     """
     result = subprocess.run(
-        (DWARFDUMP, "--lookup=0x" + addr, "-p", elf), capture_output=True, text=True
+        (DWARFDUMP, f"--lookup=0x{addr}", "-p", elf),
+        capture_output=True,
+        text=True,
     )
     dwarfdump = result.stdout
     matches = re.findall(dw_at_file_re, dwarfdump)
@@ -217,19 +216,19 @@ def find_all_panics(objdump, elf, is_riscv):
     result = subprocess.run((objdump, "-d", elf), capture_output=True, text=True)
     objdump_out = result.stdout
     for function in panic_functions:
-        function_re = re.compile(".*:.*#.*" + function + ".*")
+        function_re = re.compile(f".*:.*#.*{function}.*")
         if not is_riscv:
             # Arm-none-eabi-objdump uses ';' for comments instead of '#'
-            function_re = re.compile(".*:.*<.*" + function + ".*")
-            # TODO: arm elfs include loads of offsets from symbols in such a way that these lines
-            # are matched by this regex. In general, these loads occur within the instruction stream
-            # associated with the symbol at hand, and will usually be excluded by logic later in
-            # this function. This leads to `within_core_panic_list` and `no_info_panic_list`
-            # containing more "panics" than when analyzing a risc-v binary. We could fix this
-            # by matching *only* on functions with instructions that actually jump to a new symbol,
-            # but this would require a list of such instructions for each architecture. However
-            # as written it actually lets us identify panics which are jumped to via addresses
-            # stored in registers, which may actually catch additional valid panics.
+            function_re = re.compile(f".*:.*<.*{function}.*")
+                    # TODO: arm elfs include loads of offsets from symbols in such a way that these lines
+                    # are matched by this regex. In general, these loads occur within the instruction stream
+                    # associated with the symbol at hand, and will usually be excluded by logic later in
+                    # this function. This leads to `within_core_panic_list` and `no_info_panic_list`
+                    # containing more "panics" than when analyzing a risc-v binary. We could fix this
+                    # by matching *only* on functions with instructions that actually jump to a new symbol,
+                    # but this would require a list of such instructions for each architecture. However
+                    # as written it actually lets us identify panics which are jumped to via addresses
+                    # stored in registers, which may actually catch additional valid panics.
         matches = re.findall(function_re, objdump_out)
 
         def getAddr(line):
@@ -238,7 +237,9 @@ def find_all_panics(objdump, elf, is_riscv):
         addrs = list(map(getAddr, matches))
         for addr in addrs:
             result = subprocess.run(
-                (DWARFDUMP, "--lookup=0x" + addr, elf), capture_output=True, text=True
+                (DWARFDUMP, f"--lookup=0x{addr}", elf),
+                capture_output=True,
+                text=True,
             )
             dwarfdump = result.stdout
             dw_at_file = re.search(dw_at_file_re, dwarfdump)
@@ -252,18 +253,18 @@ def find_all_panics(objdump, elf, is_riscv):
             abstract_origin_string = ""
             linkage_name_string = ""
             if dw_at_file:
-                file_string = dw_at_file.group(0).strip()
-                line_string = dw_at_line.group(0).strip()
+                file_string = dw_at_file[0].strip()
+                line_string = dw_at_line[0].strip()
             panicinfo = {}
             panicinfo["addr"] = addr
             panicinfo["function"] = function
             if line_info:
-                line_info_string = line_info.group(0).strip()
+                line_info_string = line_info[0].strip()
                 panicinfo["line_info"] = line_info_string
             if abstract_origin:
-                abstract_origin_string = abstract_origin.group(0).strip()
+                abstract_origin_string = abstract_origin[0].strip()
             if linkage_name:
-                linkage_name_string = linkage_name.group(0).strip()
+                linkage_name_string = linkage_name[0].strip()
             if "DW_AT_call_file" in file_string and "DW_AT_decl_file" in file_string:
                 raise RuntimeError("I misunderstand DWARF")
             if "DW_AT_call_file" in file_string or "DW_AT_decl_file" in file_string:
@@ -275,8 +276,8 @@ def find_all_panics(objdump, elf, is_riscv):
                 if "DW_AT_decl_file" in file_string:
                     panicinfo["decl_file"] = filename
                     panicinfo["decl_line"] = line_num
-                if not "/core/" in filename:
-                    if not "closure" in abstract_origin_string:
+                if "/core/" not in filename:
+                    if "closure" not in abstract_origin_string:
                         panicinfo["best_guess_source"] = "call/decl"
                     else:
                         panicinfo["best_guess_source"] = "call-closure-line-info"
@@ -367,9 +368,7 @@ def find_all_panics(objdump, elf, is_riscv):
                         # changes in the binary.
                         if function_name not in panic_functions:
                             # don't double insert
-                            panic_functions.append(
-                                function_name + ">"
-                            )  # so FUNCTION_22 does not catch FUNCTION_222
+                            panic_functions.append(f"{function_name}>")
                         within_core_panic_list.append(panicinfo)
                         continue
                     no_info_panic_list.append(panicinfo)
@@ -387,44 +386,28 @@ def pretty_print(panicinfo):
     if panicinfo["best_guess_source"] == "call/decl":
         try:
             print(
-                "\t{} -- {}:{}".format(
-                    panicinfo["addr"], panicinfo["call_file"], panicinfo["call_line"]
-                )
+                f'\t{panicinfo["addr"]} -- {panicinfo["call_file"]}:{panicinfo["call_line"]}'
             )
         except:
             print(
-                "\t{} -- in function starting at {}:{}".format(
-                    panicinfo["addr"], panicinfo["decl_file"], panicinfo["decl_line"]
-                )
+                f'\t{panicinfo["addr"]} -- in function starting at {panicinfo["decl_file"]}:{panicinfo["decl_line"]}'
             )
     elif panicinfo["best_guess_source"] == "parent":
         print(
-            "\t{} -- at or in function starting at {}:{}".format(
-                panicinfo["addr"],
-                panicinfo["parent_call_file"],
-                panicinfo["parent_call_line"],
-            )
+            f'\t{panicinfo["addr"]} -- at or in function starting at {panicinfo["parent_call_file"]}:{panicinfo["parent_call_line"]}'
         )
     elif panicinfo["best_guess_source"] == "lineinfo":
-        print(
-            "\t{} -- in closure, try: {}".format(
-                panicinfo["addr"], panicinfo["line_info"]
-            )
-        )
+        print(f'\t{panicinfo["addr"]} -- in closure, try: {panicinfo["line_info"]}')
     elif panicinfo["best_guess_source"] == "abstract_origin + line":
         print(
-            "\t{} -- line_info: {} from origin :{}".format(
-                panicinfo["addr"], panicinfo["line_info"], panicinfo["abstract_origin"]
-            )
+            f'\t{panicinfo["addr"]} -- line_info: {panicinfo["line_info"]} from origin :{panicinfo["abstract_origin"]}'
         )
     elif panicinfo["best_guess_source"] == "call-closure-line-info":
         print(
-            "\t{} -- in closure starting on line_info: {}".format(
-                panicinfo["addr"], panicinfo["line_info"]
-            )
+            f'\t{panicinfo["addr"]} -- in closure starting on line_info: {panicinfo["line_info"]}'
         )
     else:
-        raise RuntimeError("Missing best guess source: {}".format(panicinfo))
+        raise RuntimeError(f"Missing best guess source: {panicinfo}")
 
 
 def main():
@@ -432,32 +415,27 @@ def main():
     if sys.version_info.minor < 7:
         print("This tool requires Python 3.7+")
         return -1
-    print("Tock panic report for " + args.ELF)
+    print(f"Tock panic report for {args.ELF}")
 
-    objdump = ARM_OBJDUMP
-    if args.riscv:
-        objdump = RISCV_OBJDUMP
-
+    objdump = RISCV_OBJDUMP if args.riscv else ARM_OBJDUMP
     (panic_list, within_core_panic_list, no_info_panic_list) = find_all_panics(
         objdump, args.ELF, args.riscv
     )
-    print("num_panics: {}".format(len(panic_list)))
-    buckets_list = {}
-    for f in panic_functions:
-        buckets_list[f] = []
+    print(f"num_panics: {len(panic_list)}")
+    buckets_list = {f: [] for f in panic_functions}
     for panic in panic_list:
         buckets_list[panic["function"]].append(panic)
     for f, l in buckets_list.items():
         if len(l) > 0:
-            print("{}: {}".format(f, len(l)))
+            print(f"{f}: {len(l)}")
         for p in l:
             pretty_print(p)
             if args.verbose:
                 print(p)
                 print()
 
-    print("num panics in core ignored: {}".format(len(within_core_panic_list)))
-    print("num panics for which no info available: {}".format(len(no_info_panic_list)))
+    print(f"num panics in core ignored: {len(within_core_panic_list)}")
+    print(f"num panics for which no info available: {len(no_info_panic_list)}")
     if args.verbose:
         print(
             "If more debug info is needed, run dwarfdump directly on the address in question."

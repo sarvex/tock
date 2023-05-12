@@ -89,7 +89,7 @@ kernel_data = []
 def usage(message):
     """Prints out an error message and usage"""
     if message != "":
-        print("error: " + message)
+        print(f"error: {message}")
     print(
         """Usage: print_memory_usage.py ELF
 Options:
@@ -109,14 +109,7 @@ def is_private_symbol(symbol):
     """Returns whether a symbol is a private symbol. Private symbols
     are inserted by the compiler and denote internal structure: they
     are not included when attributing space to symbols."""
-    if symbol[0:4] == ".LBB":
-        return True
-    elif symbol[0:4] == ".LBE":
-        return True
-    elif symbol[0:5] == ".Ltmp":
-        return True
-    else:
-       return False
+    return symbol[:4] == ".LBB" or symbol[:4] == ".LBE" or symbol[:5] == ".Ltmp"
 
 
 def process_section_line(line):
@@ -125,7 +118,7 @@ def process_section_line(line):
     # pylint: disable=anomalous-backslash-in-string,line-too-long
     match = re.search("^\S+\s+\.(text|relocate|sram|stack|app_memory)\s+(\S+).+", line)
     if match != None:
-        sections[match.group(1)] = int(match.group(2), 16)
+        sections[match[1]] = int(match[2], 16)
 
 
 # Take a Rust-style symbol of '::' delineated names and trim the last
@@ -137,12 +130,10 @@ def trim_hash_from_symbol(symbol):
     # Remove the hash off the end
     tokens = symbol.split("::")
     last = tokens[-1]
-    if last[0] == "h":
-        tokens = tokens[:-1]  # Trim off hash if it exists
-        trimmed_name = "::".join(tokens)  # reassemble
-        return trimmed_name
-    else:
+    if last[0] != "h":
         return symbol
+    tokens = tokens[:-1]  # Trim off hash if it exists
+    return "::".join(tokens)
 
 
 escape_sequences = [
@@ -171,7 +162,7 @@ def parse_mangled_name(name):
     as a :: separated name, eliding the trait (if any)."""
 
     # Not a mangled name, just return it unchanged.
-    if name[0:3] != "_ZN":
+    if name[:3] != "_ZN":
         return name
 
     # Trim a trailing . number (e.g., ".71") which breaks demangling
@@ -205,27 +196,22 @@ def parse_mangled_name(name):
 
     if structure_end >= 0:
         method = corrected_name[structure_end + 2 :]
-        full_structure_name = corrected_name[0:structure_end]
+        full_structure_name = corrected_name[:structure_end]
     else:
         method = corrected_name
 
     structure = full_structure_name
-    if corrected_name[0:1] == "_":
+    if corrected_name[:1] == "_":
         split = full_structure_name.split(" as ")
         structure = split[0]
         # trim the _<
         structure = structure[2:]
 
     symbol = structure
-    if len(symbol) > 0:
-        symbol = symbol + "::" + method
-    else:
-        # No structure, just a method
-        symbol = method
-
-    if symbol[0:2] == "-L" or symbol[0:2] == "-l" or symbol[0:4] == "anon":
+    symbol = f"{symbol}::{method}" if len(symbol) > 0 else method
+    if symbol[:2] == "-L" or symbol[:2] == "-l" or symbol[:4] == "anon":
         symbol = "Anonymous"
-    if symbol[0:7] == "-hidden":
+    if symbol[:7] == "-hidden":
         symbol = "Hidden"
 
     return symbol
@@ -245,15 +231,15 @@ def process_symbol_line(line):
         line,
     )
     if match != None:
-        addr = int(match.group(1), 16)
-        linkage = match.group(2)
-        symbol_type = match.group(3)
-        segment = match.group(4)
-        size = int(match.group(5), 16)
-        name = match.group(6)
+        addr = int(match[1], 16)
+        linkage = match[2]
+        symbol_type = match[3]
+        segment = match[4]
+        size = int(match[5], 16)
+        name = match[6]
 
         # Compiler embeds these symbols, ignore them
-        if name[0:3] == "$t." or name[0:3] == "$d.":
+        if name[:3] in ["$t.", "$d."]:
             return
 
         # Special case end of kernel RAM, given that there is padding
@@ -267,20 +253,17 @@ def process_symbol_line(line):
             demangled = parse_mangled_name(name)
             kernel_initialized.append((demangled, addr, size, 0, "variable"))
 
-        # Uninitialized data, stored in a zeroed RAM section. The
-        # .bss section in normal hosted C.
         elif segment == "sram":
             demangled = parse_mangled_name(name)
             kernel_uninitialized.append((demangled, addr, size, 0, "variable"))
 
-        # Code and embedded data.
         elif segment == "text":
             match = re.search("\$(((\w+\.\.)+)(\w+))\$", name)
             # It's a function
             if is_private_symbol(name):
                 # Skip this symbol
                 return
-            if symbol_type == "F" or symbol_type == "f":
+            if symbol_type in ["F", "f"]:
                 try:
                     symbol = parse_mangled_name(name)
                     kernel_text.append((symbol, addr, size, 0, "function"))
@@ -311,15 +294,15 @@ def print_section_information():
     flash_size = text_size + relocate_size
     ram_size = stack_size + sram_size + relocate_size
 
-    print("Kernel occupies " + str(flash_size) + " bytes of flash")
+    print(f"Kernel occupies {str(flash_size)} bytes of flash")
     print("  " + "{:>6}".format(text_size) + "\tcode and constant strings")
     print("  " + "{:>6}".format(relocate_size) + "\tvariable initializers")
-    print("Kernel occupies " + str(ram_size) + " bytes of RAM")
+    print(f"Kernel occupies {str(ram_size)} bytes of RAM")
     print("  " + "{:>6}".format(stack_size) + "\tstack")
     print("  " + "{:>6}".format(sram_size) + "\tuninitialized variables")
     print("  " + "{:>6}".format(relocate_size) + "\tinitialized variables")
     print("  " + "{:>6}".format(sram_size + relocate_size) + "\tvariables total")
-    print("Applications allocated " + str(app_size) + " bytes of RAM")
+    print(f"Applications allocated {str(app_size)} bytes of RAM")
 
 
 # Take a list of 'symbols' and group them into in 'groups' as aggregates
@@ -340,11 +323,11 @@ def group_symbols(groups, symbols, waste, section):
     """Take a list of symbols and group them into 'groups' for reporting
     aggregate flash/RAM use."""
     global symbol_depth
-    output = ""
     expected_addr = 0
     waste_sum = 0
     prev_symbol = ""
-    for (symbol, addr, size, real_size, _) in symbols:
+    output = ""
+    for symbol, addr, size, real_size, _ in symbols:
         # If we find a gap between symbol+size and the next symbol, we might
         # have waste. But this is only true if it's not the first symbol and
         # this is actually a variable and just just a symbol (e.g., _estart)
@@ -355,11 +338,7 @@ def group_symbols(groups, symbols, waste, section):
             and (waste or verbose)
         ):
             output = (
-                output
-                + "   ! "
-                + str(addr - expected_addr)
-                + " bytes of data or padding after "
-                + prev_symbol
+                f"{output}   ! {str(addr - expected_addr)} bytes of data or padding after {prev_symbol}"
                 + "\n"
             )
             waste_sum = waste_sum + (addr - expected_addr)
@@ -372,14 +351,14 @@ def group_symbols(groups, symbols, waste, section):
             # based on observation.
             # .Lanon* and str.* are embedded string.
             if (
-                symbol[0:6] == ".Lanon"
-                or symbol[0:5] == "anon."
-                or symbol[0:4] == "str."
+                symbol[:6] == ".Lanon"
+                or symbol[:5] == "anon."
+                or symbol[:4] == "str."
             ):
                 key = "Constant strings"
-            elif symbol[0:8] == ".hidden ":
+            elif symbol[:8] == ".hidden ":
                 key = "ARM aeabi support"
-            elif symbol[0:3] == "_ZN":
+            elif symbol[:3] == "_ZN":
                 key = "Unidentified auto-generated"
             elif symbol == "Padding at end of kernel RAM":
                 key = symbol
@@ -391,11 +370,11 @@ def group_symbols(groups, symbols, waste, section):
             # Packages have a trailing :: while other categories don't;
             # this allows us to disambiguate when * is relevant or not
             # in printing.
-            key = "::".join(tokens[0:symbol_depth])
+            key = "::".join(tokens[:symbol_depth])
             name = ""
 
             if len(tokens[symbol_depth:]) > 0:
-                key = key + "::"
+                key += "::"
                 name = "::".join(tokens[symbol_depth:])
         if key in groups.keys():
             groups[key].append((name, real_size))
@@ -407,9 +386,7 @@ def group_symbols(groups, symbols, waste, section):
         prev_symbol = symbol
 
     if waste and waste_sum > 0:
-        output = (
-            output + "Total of " + str(waste_sum) + " bytes wasted in " + section + "\n"
-        )
+        output = f"{output}Total of {str(waste_sum)} bytes wasted in {section}" + "\n"
 
     return output
 
@@ -418,14 +395,9 @@ def string_for_group(key, padding_size, group_size, num_elements):
     """Return the string for a group of variables, with padding added on the
     right; decides whether to add a * or not based on the name of the group
     and number of elements in it."""
-    if key[-2:] == "::":
-        key = key + "*"
-        key = key.ljust(padding_size + 2, " ")
-        return "  " + key + str(group_size) + " bytes\n"
-    else:
-        key = key + ""
-        key = key.ljust(padding_size + 2, " ")
-        return "  " + key + str(group_size) + " bytes\n"
+    key = f"{key}*" if key[-2:] == "::" else f"{key}"
+    key = key.ljust(padding_size + 2, " ")
+    return f"  {key}{str(group_size)}" + " bytes\n"
 
 
 def print_groups(title, groups):
@@ -462,7 +434,7 @@ def print_groups(title, groups):
             )
             group_sum = group_sum + group_size
 
-    print(title + ": " + str(group_sum) + " bytes")
+    print(f"{title}: {str(group_sum)} bytes")
     print(output, end="")
 
 def split_text_into_data_and_functions():
@@ -501,8 +473,8 @@ def print_all_symbols(title, symbols):
         name = name.ljust(max_string_len + 2, " ")
         symbol_sum = symbol_sum + real_size
         size_str = str(real_size).rjust(max_byte_len, " ")
-        output = output + "  " + name + size_str + " bytes\n"
-    print(title + ": " + str(symbol_sum) + " bytes")
+        output = f"{output}  {name}{size_str}" + " bytes\n"
+    print(f"{title}: {str(symbol_sum)} bytes")
     print(output, end="")
 
 
@@ -553,8 +525,7 @@ def print_grouped_symbol_information():
 
 def sort_value(symbol_entry):
     """Helper function for sorting symbols by start address and size."""
-    value = (symbol_entry[1] << 16) + symbol_entry[2]
-    return value
+    return (symbol_entry[1] << 16) + symbol_entry[2]
 
 def get_addr(symbol_entry):
     """Helper function for sorting symbols by start address."""
@@ -606,18 +577,18 @@ def parse_options(opts):
     for (opt, val) in optlist:
         if opt == "-a":
             print_all = True
-        elif opt == "-d" or opt == "--depth":
+        elif opt in ["-d", "--depth"]:
             symbol_depth = int(val)
-        elif opt == "-v" or opt == "--verbose":
+        elif opt in ["-v", "--verbose"]:
             verbose = True
-        elif opt == "-w" or opt == "--show-waste":
+        elif opt in ["-w", "--show-waste"]:
             show_waste = True
-        elif opt == "-s" or opt == "--size":
+        elif opt in ["-s", "--size"]:
             sort_by_size = True
         elif opt == "--objdump":
             OBJDUMP = val
         else:
-            usage("unrecognized option: " + opt)
+            usage(f"unrecognized option: {opt}")
             return []
 
     return leftover
@@ -644,22 +615,24 @@ if __name__ == "__main__":
         usage(str(err))
         sys.exit(-1)
 
-    header_lines = os.popen(OBJDUMP + " --section-headers " + elf_name).readlines()
+    header_lines = os.popen(f"{OBJDUMP} --section-headers {elf_name}").readlines()
 
-    print("Tock memory usage report for " + elf_name)
+    print(f"Tock memory usage report for {elf_name}")
     arch = "UNKNOWN"
 
     for hline in header_lines:
         # pylint: disable=anomalous-backslash-in-string
         hmatch = re.search("file format (\S+)", hline)
         if hmatch != None:
-            arch = hmatch.group(1)
+            arch = hmatch[1]
 
     if arch == "UNKNOWN":
         usage("could not detect architecture of ELF")
         sys.exit(-1)
 
-    objdump_lines = os.popen(OBJDUMP + " -t --section-headers " + elf_name).readlines()
+    objdump_lines = os.popen(
+        f"{OBJDUMP} -t --section-headers {elf_name}"
+    ).readlines()
     objdump_output_section = "start"
 
     for oline in objdump_lines:

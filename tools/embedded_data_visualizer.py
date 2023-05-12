@@ -118,19 +118,18 @@ def create_function_page(func_name, addresses, symbols_dict, sro_data, sro_start
     symbol_infos.sort(key=lambda x: x[1], reverse=True)
 
     rows = []
+    hex_font = ' style=\"font-family: monospace, monospace;\"'
+
     for i in range(len(symbol_infos)):
         info = symbol_infos[i]
 
         ascii_data = info[3]
         hex_data = binascii.hexlify(
             bytes(ascii_data, encoding='utf-8')).decode('utf-8')
-        formatted_hex_data = ''
-        for j in range(0, len(hex_data), 4):
-            formatted_hex_data += f'{hex_data[j:j+4]} '
-
+        formatted_hex_data = ''.join(
+            f'{hex_data[j:j + 4]} ' for j in range(0, len(hex_data), 4)
+        )
         initial_hex = ascii_data.count(u'\uFFFD') > (len(ascii_data) // 2)
-
-        hex_font = ' style=\"font-family: monospace, monospace;\"'
 
         escaped_ascii_data = ascii_data.replace('`', '\`')
 
@@ -174,7 +173,7 @@ def create_function_page(func_name, addresses, symbols_dict, sro_data, sro_start
 
 
 def get_table_entry_string(function_name, info, index):
-    html_string = f'''
+    return f'''
         <tr>
             <th><a href="funcs/{index}.html">{function_name}</a></th>
             <th style="text-align: right;">{info.embedded_data_size_estimated}</th>
@@ -182,7 +181,6 @@ def get_table_entry_string(function_name, info, index):
             <th style="text-align: right;">{info.embedded_data_count}</th>
         </tr>
     '''
-    return html_string
 
 
 def sort_functions(func_to_address_list):
@@ -194,8 +192,7 @@ def sort_functions(func_to_address_list):
         grouped_by_crate_dict[crate].append(func_to_address)
 
     grouped_by_crate_list = []
-    for crate in grouped_by_crate_dict.keys():
-        func_list = grouped_by_crate_dict[crate]
+    for func_list in grouped_by_crate_dict.values():
         crate_size = sum(x[1].embedded_data_size_estimated for x in func_list)
         func_list.sort(
             key=lambda x: x[1].embedded_data_size_estimated, reverse=True)

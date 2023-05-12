@@ -77,8 +77,7 @@ SymbolInfo = namedtuple('SymbolInfo', 'actual_size estimated_size name')
 def get_srodata_address(disasm):
     pattern = '<_srodata>:'
     for i in range(len(disasm)):
-        match = re.findall(pattern, disasm[i])
-        if match:
+        if match := re.findall(pattern, disasm[i]):
             return disasm[i].split()[0], i
     critical_error('Invalid binary, cannot find <_srodata> section')
 
@@ -91,12 +90,10 @@ def map_adress_to_data(disasm):
 
     sro_data = ""
     for i in range(start_index, len(disasm)):
-        match = re.search(address_pattern, disasm[i])
-        if match:
-            address = int(match.group(1), 16)
+        if match := re.search(address_pattern, disasm[i]):
+            address = int(match[1], 16)
             if (sro_address <= address < sro_end):
-                data = re.findall(data_pattern, disasm[i])
-                if data:
+                if data := re.findall(data_pattern, disasm[i]):
                     # remove the \t character from first byte
                     data[0] = re.sub('\s+', '', data[0])
                     for j in range(len(data)):
@@ -104,14 +101,12 @@ def map_adress_to_data(disasm):
                         # seperate the bytes
                         sro_data += bytes.fromhex(data[j][2:]
                                                   ).decode("utf-8", errors='replace')
-                        sro_data += bytes.fromhex(data[j][0:2]
-                                                  ).decode("utf-8", errors='replace')
+                        sro_data += bytes.fromhex(data[j][:2]).decode("utf-8", errors='replace')
 
     return sro_data
 
 
 def get_sro_range(disasm):
-    data_pattern = r'[ |\t][0-9a-f]{4}'
     address_pattern = r'^[0-9a-f]{1,16}'
     sro_string, start_index = get_srodata_address(disasm)
     sro_address = int(sro_string, 16)
@@ -121,19 +116,18 @@ def get_sro_range(disasm):
     for i in range(start_index, len(disasm)):
         if (disasm[i] == '\n'):
             previous_blank = True
-        else:
-            match = re.findall(address_pattern, disasm[i])
-            if match:
-                last_address_seen = int(match[0], 16)
-                last_line = i
-                previous_blank = False
-            elif previous_blank:
-                # if the last line was blank and current line has no address data has ended
-                break
+        elif match := re.findall(address_pattern, disasm[i]):
+            last_address_seen = int(match[0], 16)
+            last_line = i
+            previous_blank = False
+        elif previous_blank:
+            # if the last line was blank and current line has no address data has ended
+            break
 
     # address points to the beginning of the line of data
     # must also add the length of data in the line itself
     if last_line != -1:
+        data_pattern = r'[ |\t][0-9a-f]{4}'
         data = re.findall(data_pattern, disasm[last_line])
         last_address_seen += len(data)*2
 
@@ -163,8 +157,7 @@ def filter_symbol_table(disasm, symbols_table):
 
 
 def estimate_empty_symbols(symbols_table):
-    items_list = list(symbols_table.items())
-    items_list.sort()
+    items_list = sorted(symbols_table.items())
     res = {}
     for i in range(len(items_list)):
         address = items_list[i][0]
@@ -187,9 +180,9 @@ def build_symbols_dict(symbols_table):
 
         matches = re.search(
             '^([0-9a-f]+)\s+[lg]\s+O?\s+\.text\s+([0-9a-f]+)\s+(.*)', line)
-        address = int(matches.group(1), 16)
-        size = int(matches.group(2), 16)
-        name = matches.group(3)
+        address = int(matches[1], 16)
+        size = int(matches[2], 16)
+        name = matches[3]
 
         if address not in mapping:
             mapping[address] = (size, name)
@@ -211,8 +204,7 @@ def trace_function(disasm, line_num):
     # pattern to detect if there's a function in a line
     func_pattern = r'^[0-9a-f]{1,16} <.*>:\n'
     for i in range(line_num, -1, -1):
-        match = re.findall(func_pattern, disasm[i])
-        if match:
+        if match := re.findall(func_pattern, disasm[i]):
             func_name = disasm[i][10:-3]
             if func_name[0] == '_':
                 return parse_mangled_name(func_name)
@@ -231,8 +223,7 @@ def account_symbols(disasm, symbols):
     address_pattern = r' [0-9a-f]{1,16} '
 
     for i in range(len(disasm)):
-        match = re.findall(line_pattern, disasm[i])
-        if match:
+        if match := re.findall(line_pattern, disasm[i]):
             address = int(re.findall(address_pattern, match[0])[0].strip(), 16)
             if address in symbols:
                 func_name = trace_function(disasm, i)
@@ -262,11 +253,10 @@ def add_size_information(func_to_address, symbols):
 
 
 def colored_string(msg, color):
-    RED = '\033[31m'
-    YELLOW = '\033[93m'
     END_COLOR = '\033[0m'
     if color == 'red':
-        return RED + msg + END_COLOR
+        return '\033[31m' + msg + END_COLOR
+    YELLOW = '\033[93m'
     return YELLOW + msg + END_COLOR
 
 
@@ -288,10 +278,7 @@ def main():
     if args['help']:
         print(HELP_STRING)
         sys.exit()
-    if args['objdump'] is None:
-        objdump = find_objdump()
-    else:
-        objdump = args['objdump']
+    objdump = find_objdump() if args['objdump'] is None else args['objdump']
     if args['elf_path'] is None:
         critical_error(
             'please provide an elf file with the --elf_path/-e option')

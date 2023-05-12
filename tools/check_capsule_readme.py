@@ -8,6 +8,7 @@
 Check if all of the available capsules are documented in the README.
 '''
 
+
 import os
 import re
 
@@ -26,10 +27,7 @@ with open('capsules/README.md') as f:
 	for l in f:
 		items = re.findall(r".*\((src/.*?)\).*", l)
 		if len(items) > 0:
-			for item in items:
-				documented_capsules.append('capsules/{}'.format(item))
-
-
+			documented_capsules.extend(f'capsules/{item}' for item in items)
 # Find all capsule source files.
 for subdir, dirs, files in os.walk(os.fsencode('capsules/src/')):
 	for file in files:
@@ -37,7 +35,7 @@ for subdir, dirs, files in os.walk(os.fsencode('capsules/src/')):
 
 		# Get just the part after /src, effectively.
 		folders = filepath.split('/')
-		filepath = '/'.join(folders[0:3])
+		filepath = '/'.join(folders[:3])
 
 		# Skip some noise.
 		for skip in SKIP:
@@ -56,10 +54,10 @@ removed = list(set(documented_capsules) - set(implemented_capsules))
 
 print('The following capsules do not seem to be documented:')
 for m in sorted(missing):
-	print(' - {}'.format(m))
+	print(f' - {m}')
 
 
 print('The following capsules seem to have been removed:')
 for m in sorted(removed):
-	print(' - {}'.format(m))
+	print(f' - {m}')
 

@@ -37,10 +37,10 @@ def main():
                     prev_RAM -= int(line.split()[2])
                     break
     except FileNotFoundError:
-        sys.exit("No prior benchmark available for board: {}".format(board))
+        sys.exit(f"No prior benchmark available for board: {board}")
 
     if prev_flash == -1 or prev_RAM == -1:
-        sys.exit("Failed to parse prev_bench for board: {}".format(board))
+        sys.exit(f"Failed to parse prev_bench for board: {board}")
 
     with open(args.cur_bench, "r") as f:
         for line in f:
@@ -57,7 +57,7 @@ def main():
                 cur_RAM -= int(line.split()[2])
                 break
     if cur_flash == -1 or cur_RAM == -1:
-        sys.exit("Failed to parse cur_bench for board: {}".format(board))
+        sys.exit(f"Failed to parse cur_bench for board: {board}")
 
     diff_flash = cur_flash - prev_flash
     diff_RAM = cur_RAM - prev_RAM
@@ -69,13 +69,8 @@ def main():
     flash_percent = diff_flash / prev_flash * 100
     RAM_percent = diff_RAM / prev_RAM * 100
 
-    flash_change_string = "+"
-    if diff_flash < 0:
-        flash_change_string = ""
-    RAM_change_string = "+"
-    if diff_RAM < 0:
-        RAM_change_string = ""
-
+    flash_change_string = "" if diff_flash < 0 else "+"
+    RAM_change_string = "" if diff_RAM < 0 else "+"
     f = open(args.outfile, "a+")
 
     f.write(
